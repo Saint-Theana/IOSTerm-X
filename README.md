@@ -49,6 +49,26 @@ BasicTerminal.InputReader inputReader = new BasicTerminal.InputReader(){
     System.err.printn("Hello world.");
 ```
 
+## 4: how to read input manually?
+```java
+terminal.interceptReader(new BasicTerminal.InputReader(){
+	@Override
+	public void read(String input)
+	{
+		//here you can get the input
+		//remember after you get what you want,call terminal.releaseReader()
+	}
+});
+```
+
+## 5: anything else?
+```java
+//password input mode
+terminal.enableInputVisibility();
+terminal.disableInputVisibility();
+});
+```
+
 ## After that,a text gui interface will open.
 ## remember,do not use gradle run to test it,do not ask why,try it and you will get why.
 
