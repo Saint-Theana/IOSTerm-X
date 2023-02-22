@@ -1,6 +1,6 @@
 # IOSTerm-X
 [![](https://jitpack.io/v/Saint-Theana/IOSTerm-X.svg)](https://jitpack.io/#Saint-Theana/IOSTerm-X)
-
+![gif](https://raw.githubusercontent.com/Saint-Theana/IOSTerm-X/master/xxx.gif)
 An I/O seperated terminal Text-Gui interface based on lanterna
 
 To add this library:
