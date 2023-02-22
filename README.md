@@ -66,7 +66,6 @@ terminal.interceptReader(new BasicTerminal.InputReader(){
 //password input mode
 terminal.enableInputVisibility();
 terminal.disableInputVisibility();
-});
 ```
 
 ## After that,a text gui interface will open.
