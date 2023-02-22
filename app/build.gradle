@@ -1,0 +1,46 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'application'
+
+mainClassName = 'io.github.sainttheana.TestMain'
+
+jar {
+    archiveBaseName = 'output'
+    archiveVersion =  '0.1.0'
+	manifest {
+        attributes(
+            //'Class-Path': configurations.compile.collect { it.getName() }.join(' '),
+            'Main-Class': 'io.github.sainttheana.TestMain'
+        )
+    }
+}
+
+run{
+    standardInput = System.in
+}
+
+tasks.withType(Jar.class).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('fatjar', Jar) {
+  
+  manifest.from jar.manifest
+  classifier = 'all'
+  from {
+    configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+  } {
+    
+  }
+  with jar
+}
+
+dependencies {
+	implementation 'com.googlecode.lanterna:lanterna:3.1.1'
+	implementation project(':iosterm')
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+// end::dependencies[]
+
+// tag::wrapper[]
+// end::wrapper[]
