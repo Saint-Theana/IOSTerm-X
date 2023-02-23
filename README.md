@@ -14,7 +14,7 @@ lallprojects {
 }
 	
 dependencies {
-	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.2'
+	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.3'
 }
 ```
 
@@ -51,6 +51,8 @@ BasicTerminal.InputReader inputReader = new BasicTerminal.InputReader(){
 
 ## 4: how to read input manually?
 ```java
+//there are two ways to do that
+//1.intercept terminal's reader.(recomanded)
 terminal.interceptReader(new BasicTerminal.InputReader(){
 	@Override
 	public void read(String input)
@@ -59,6 +61,12 @@ terminal.interceptReader(new BasicTerminal.InputReader(){
 		//remember after you get what you want,call terminal.releaseReader()
 	}
 });
+
+//terminal overrides System.in so you can use Scanner
+//notice:this does not behave like standard input,scanner will read all current input line even before you called new Scanner(System.in);
+//notice:since there is no way to know when user uses a Scanner,so the input will also call terminals reader.
+Scanner s=new Scanner(System.in);
+System.out.println(s.next());
 ```
 
 ## 5: anything else?

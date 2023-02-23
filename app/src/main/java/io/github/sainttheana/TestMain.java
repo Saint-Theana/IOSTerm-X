@@ -1,4 +1,5 @@
 package io.github.sainttheana;
+import java.util.Scanner;
 
 public class TestMain
 {
@@ -26,6 +27,8 @@ public class TestMain
 		public void read(String input)
 		{
 			System.out.println("read input!"+input);
+			Scanner s=new Scanner(System.in);
+			System.out.println(s.next());
 		}
 	}
 

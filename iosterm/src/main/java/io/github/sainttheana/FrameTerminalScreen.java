@@ -40,10 +40,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
     private int currentContentEndPosition = 0;//滚动区数据最后一行的位置
 	private int bufferSizeOverflow =0;//当前的buffer可能由于超长字符串拆分为多行，从而造成比原始数据行数更多的情况
     private TextGraphics textGraphics;
-
 	private boolean resizing;
-
-
 
 	@Override
 	public void run()

@@ -23,6 +23,8 @@ import java.util.Queue;
 public class BasicTerminal implements TerminalResizeListener,Runnable
 {
 
+	private TerminalInputStream inputStream;
+
 	@Override
 	public void run()
 	{
@@ -65,9 +67,8 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 	private BasicTerminal.InputReader currentReader;
     private boolean scrollMode;
 	private boolean inputVisibility=true;
-
 	private long lastResizeTime;
-
+	
 	public void disableInputVisibility()
 	{
 		inputVisibility = false;
@@ -94,23 +95,19 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 	{
         DefaultTerminalFactory factory =
 			new DefaultTerminalFactory(System.out, System.in, Charset.forName("UTF8"));
-
         Terminal term = factory.createTerminal();
         screen = new FrameTerminalScreen(term);
 		TerminalPrintStream a=new TerminalPrintStream(screen);
+		inputStream=new TerminalInputStream();
 		System.setOut(a);
 		System.setErr(a);
-
+		System.setIn(inputStream);
         this.adjustScreenSize(screen.getTerminalSize());
         this.reader = reader;
 		this.currentReader = reader;
         initHistory(new File(".history"));
         term.addResizeListener(this);
 		new Thread(this,"resize").start();
-   
-		
-
-
     }
 
     private void adjustScreenSize(final TerminalSize p2)
@@ -124,15 +121,6 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 		{
 			e.printStackTrace();
 		}
-
-
-
-
-        //		try {
-        //			screen.refresh();
-        //		} catch (IOException e) {
-        //			e.printStackTrace();
-        //		}
     }
 
     public void initHistory(File file)
@@ -253,18 +241,6 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
     }
 
 
-
-	private void prikknt(final String message)
-	{
-		screen.print(message);
-	}
-
-    private void printlkkn(final String message)
-	{
-		screen.println(message);
-	}
-
-
     public void process() throws IOException
 	{
         if (running)
@@ -284,11 +260,12 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
                 switch (key.getKeyType())
 				{
                     case Character:
+						inputStream.write((byte)key.getCharacter().charValue());
                         inputer.append(key.getCharacter());
-
                         break;
                     case Backspace:
                         // println("Backspace");
+						inputStream.deleteLast();
                         inputer.delete();
                         break;
                     case ArrowUp:
@@ -301,12 +278,15 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 						else
 						{
                             inputer.clear();
+							inputStream.clear();
                             historyIndex = Math.max(0, historyIndex - 1);
                             if (history.size() > 0)
 							{
+								inputStream.wrap(history.get(historyIndex).getBytes());
                                 inputer.wrap(history.get(historyIndex));
                                 inputer.gotoEnd();
                             }
+							
                         }
                         break;
                     case ArrowDown:
@@ -319,6 +299,7 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 						else
 						{
                             inputer.clear();
+							inputStream.clear();
                             if (historyIndex + 1 == history.size())
 							{
                                 inputer.wrap("");
@@ -334,6 +315,7 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
                             historyIndex = Math.max(0, Math.min(history.size() - 1, historyIndex + 1));
                             if (history.size() > 0)
 							{
+								inputStream.wrap(history.get(historyIndex).getBytes());
                                 inputer.wrap(history.get(historyIndex));
                                 inputer.gotoEnd();
                             }
@@ -357,7 +339,8 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
                         break;
                     case Enter:
                         executeCommand();
-                        inputer.clear();
+						inputStream.write((byte)'\n');
+						inputer.clear();
                         break;
                     case Escape:
                         if (this.scrollMode())

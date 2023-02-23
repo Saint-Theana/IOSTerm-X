@@ -9,6 +9,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 
 public class Inputer implements ThreadFactory
 {
@@ -166,7 +167,7 @@ public class Inputer implements ThreadFactory
 	{
 		StringBuilder sb=new StringBuilder();
 		int offset=inputContentDisplayStartIndex;
-		for (char c:charList)
+		for (char c:Collections.synchronizedList(charList))
 		{
 			if (offset == 0)
 			{
