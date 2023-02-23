@@ -19,13 +19,13 @@ dependencies {
 ```
 
 #implemented feature:
-- [x]1.Chiness Japeness Korean character length adapt.
-- [x]2.Auto word wrapping.
-- [x]3.Page scroll up/down
-- [x]4.Resize auto adapt.
-- [x]5.Input visibility control.
-- [x]6.Input history.
-- [ ]7.Page up/down.
+ - [x]1.Chiness Japeness Korean character length adapt.
+ - [x]2.Auto word wrapping.
+ - [x]3.Page scroll up/down
+ - [x]4.Resize auto adapt.
+ - [x]5.Input visibility control.
+ - [x]6.Input history.
+ - [ ]7.Page up/down.
 
 # How to use
 
