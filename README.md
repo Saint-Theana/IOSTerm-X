@@ -62,7 +62,8 @@ terminal.interceptReader(new BasicTerminal.InputReader(){
 	}
 });
 
-//terminal overrides System.in so you can use Scanner
+
+//2.terminal overrides System.in so you can use Scanner
 //notice:this does not behave like standard input,scanner will read all current input line even before you called new Scanner(System.in);
 //notice:since there is no way to know when user uses a Scanner,so the input will also call terminals reader.
 Scanner s=new Scanner(System.in);
