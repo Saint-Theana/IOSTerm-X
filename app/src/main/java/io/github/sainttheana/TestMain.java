@@ -12,11 +12,9 @@ public class TestMain
 
 
     public static void main(String[] args) throws Exception{
-        
 		inputReader=new MyInputReader();
 		terminal = new BasicTerminal(inputReader);
 		terminal.process();
-    
     }
 	
 	
@@ -26,9 +24,8 @@ public class TestMain
 		@Override
 		public void read(String input)
 		{
-			System.out.println("read input!"+input);
-			Scanner s=new Scanner(System.in);
-			System.out.println(s.next());
+			//System.out.println("read input!"+input);
+			
 		}
 	}
 

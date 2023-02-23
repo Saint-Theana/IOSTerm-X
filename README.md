@@ -1,7 +1,7 @@
 # IOSTerm-X
 [![](https://jitpack.io/v/Saint-Theana/IOSTerm-X.svg)](https://jitpack.io/#Saint-Theana/IOSTerm-X)
 ![gif](https://raw.githubusercontent.com/Saint-Theana/IOSTerm-X/master/xxx.gif)
-An I/O seperated terminal Text-Gui interface based on lanterna
+An I/O seperated terminal Text-Gui interface based on [lanterna](https://github.com/mabe02/lanterna)
 
 To add this library:
 [jitpack](https://jitpack.io/#Saint-Theana/IOSTerm-X)
@@ -15,6 +15,7 @@ lallprojects {
 	
 dependencies {
 	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.3'
+	implementation 'com.googlecode.lanterna:lanterna:3.1.1'
 }
 ```
 
