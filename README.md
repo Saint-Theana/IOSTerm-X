@@ -14,8 +14,7 @@ lallprojects {
 }
 	
 dependencies {
-	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.3'
-	implementation 'com.googlecode.lanterna:lanterna:3.1.1'
+	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.4'
 }
 ```
 

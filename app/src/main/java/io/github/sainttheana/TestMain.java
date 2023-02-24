@@ -15,6 +15,11 @@ public class TestMain
 		inputReader=new MyInputReader();
 		terminal = new BasicTerminal(inputReader);
 		terminal.process();
+		System.out.println("输入帐号");
+		Scanner sc=new Scanner(System.in);
+		String account=sc.next();
+		System.out.println("ffff "+account);
+		
     }
 	
 	

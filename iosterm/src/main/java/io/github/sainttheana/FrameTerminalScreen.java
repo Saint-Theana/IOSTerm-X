@@ -51,37 +51,19 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			{
 				Action action=printQueue.take();
 				long ts=System.currentTimeMillis();
-				//System.err.println("ts "+ts);
-				//System.err.println("lastResizeTime "+lastResizeTime);
 				if(ts-lastResizeTime<200){
 					Thread.currentThread().sleep(200);
 				}
 				switch (action.type)
 				{
 					case PrintLn:
-						//for (String i:action.content.split("\n"))
-						//{
-							internalPrint(action.content+"\n");
-						//}
+						internalPrint(action.content+"\n");
 						break;
 					case Print:
 						internalPrint(action.content);
 						break;
 					case UptldateInput:
 						putCSIStyledString(0,getTerminalSize().getRows()-1,action.content);
-//						if (action.content.contains("\n"))
-//						{
-//							String[] a=action.content.split("\n");
-//							appendToLastLine(a[0]);
-//							for (int i=1;i < a.length;i++)
-//							{
-//								addNewLine(a[i]);
-//							}
-//						}
-//						else
-//						{
-//							appendToLastLine(action.content);
-//						}
 						break;
 				}
 				refreshInternal();

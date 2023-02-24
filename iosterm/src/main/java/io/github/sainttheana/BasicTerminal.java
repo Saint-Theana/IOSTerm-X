@@ -20,55 +20,23 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.text.StringEscapeUtils;
 import java.util.Queue;
 
-public class BasicTerminal implements TerminalResizeListener,Runnable
+public class BasicTerminal
 {
 
 	private TerminalInputStream inputStream;
-
-	@Override
-	public void run()
-	{
-		while(true){
-			try
-			{
-				TerminalSize size=resizeQueue.take();
-				//Thread.currentThread().sleep(100);
-				//if(System.currentTimeMillis()-lastResizeTime<100){
-					//continue;
-				//}
-			    screen.onResize();
-				if (inputer != null)
-				{
-					inputer.onResize(size);
-				}
-				
-			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
-		}
-	}
-
-	
-	
-	
 	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
-	
-	
 	//private ThreadPoolExecutor executor=new ThreadPoolExecutor(1, 1, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(10), this, new ThreadPoolExecutor.AbortPolicy());
-
 	private FrameTerminalScreen screen;
     private int historyIndex = 0;
     private Inputer inputer;
     private LimitedList<String> history = new LimitedList<>(100);
-    private boolean running = false;
+	// private boolean running = false;
     private BasicTerminal.InputReader reader;
 	private BasicTerminal.InputReader currentReader;
     private boolean scrollMode;
 	private boolean inputVisibility=true;
 	private long lastResizeTime;
-	
+
 	public void disableInputVisibility()
 	{
 		inputVisibility = false;
@@ -81,15 +49,170 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 		inputer.enableInputVisibility();
 	}
 
+	Runnable resizeThread=new Runnable(){
+		@Override
+		public void run()
+		{
+			while (true)
+			{
+				try
+				{
+					TerminalSize size=resizeQueue.take();
+					//Thread.currentThread().sleep(100);
+					//if(System.currentTimeMillis()-lastResizeTime<100){
+					//continue;
+					//}
+					screen.onResize();
+					if (inputer != null)
+					{
+						inputer.onResize(size);
+					}
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
+			}
+		}
+	};
+
+	Runnable readThread=new Runnable(){
+		@Override
+		public void run()
+		{
+			while (true)
+			{
+				KeyStroke key=null;
+				try
+				{
+					key = screen.readInput();
+				}
+				catch (IOException e)
+				{
+					e.printStackTrace();
+				}
+				if (key != null)
+				{
+					switch (key.getKeyType())
+					{
+						case Character:
+							inputStream.write((byte)key.getCharacter().charValue());
+							inputer.append(key.getCharacter());
+							break;
+						case Backspace:
+							// println("Backspace");
+							inputStream.deleteLast();
+							inputer.delete();
+							break;
+						case ArrowUp:
+							if (isInScrollMode())
+							{
+								screen.scrollLines(-1);
+								screen.refreshBuffer();
+								screen.refreshFrame();
+							}
+							else
+							{
+								inputer.clear();
+								inputStream.clear();
+								historyIndex = Math.max(0, historyIndex - 1);
+								if (history.size() > 0)
+								{
+									inputStream.wrap(history.get(historyIndex).getBytes());
+									inputer.wrap(history.get(historyIndex));
+									inputer.gotoEnd();
+								}
+
+							}
+							break;
+						case ArrowDown:
+							if (isInScrollMode())
+							{
+								screen.scrollLines(1);
+								screen.refreshBuffer();
+								screen.refreshFrame();
+							}
+							else
+							{
+								inputer.clear();
+								inputStream.clear();
+								if (historyIndex + 1 == history.size())
+								{
+									inputer.wrap("");
+									inputer.gotoEnd();
+									historyIndex = history.size();
+									break;
+								}
+								else if (historyIndex + 1 > history.size())
+								{
+									break;
+								}
+								// println(history.size()+" "+historyIndex);
+								historyIndex = Math.max(0, Math.min(history.size() - 1, historyIndex + 1));
+								if (history.size() > 0)
+								{
+									inputStream.wrap(history.get(historyIndex).getBytes());
+									inputer.wrap(history.get(historyIndex));
+									inputer.gotoEnd();
+								}
+							}
+							break;
+						case ArrowLeft:
+							inputer.goLeft();
+							break;
+						case ArrowRight:
+							// println(+terminalBuffer.length() + " " + inputStartIndex + " " +
+							// inputCursor + " " + screen.getTerminalSize().getColumns());
+							inputer.goRight();
+							break;
+						case PageDown:
+							screen.pageDown(1);
+							break;
+						case PageUp:
+							screen.pageUp(1);
+							break;
+						case Tab:
+							break;
+						case Enter:
+							executeCommand();
+							inputStream.write((byte)'\n');
+							inputer.clear();
+							break;
+						case Escape:
+							if (isInScrollMode())
+							{
+								leaveScrollMode();
+							}
+							else
+							{
+								enterScrollMode();
+							}
+							break;
+						case Home:
+							inputer.goToStart();
+							break;
+						case End:
+							inputer.gotoEnd();
+							break;
+					}
+					inputer.updateInput();
+				}
+			}
+		}
+	};
 
 
-    @Override
-    public void onResized(Terminal p1, TerminalSize p2)
+
+	private class MyTerminalResizeListener implements TerminalResizeListener
 	{
-        //System.err.println(p2);
-        screen.doResizeIfNecessary();
-        adjustScreenSize(p2);
-    }
+		@Override
+		public void onResized(Terminal p1, TerminalSize p2)
+		{
+			//System.err.println(p2);
+			screen.doResizeIfNecessary();
+			adjustScreenSize(p2);
+		}
+	}
 
     public BasicTerminal(InputReader reader) throws Exception
 	{
@@ -98,7 +221,7 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
         Terminal term = factory.createTerminal();
         screen = new FrameTerminalScreen(term);
 		TerminalPrintStream a=new TerminalPrintStream(screen);
-		inputStream=new TerminalInputStream();
+		inputStream = new TerminalInputStream();
 		System.setOut(a);
 		System.setErr(a);
 		System.setIn(inputStream);
@@ -106,8 +229,8 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
         this.reader = reader;
 		this.currentReader = reader;
         initHistory(new File(".history"));
-        term.addResizeListener(this);
-		new Thread(this,"resize").start();
+        term.addResizeListener(new MyTerminalResizeListener());
+		new Thread(resizeThread, "resize").start();
     }
 
     private void adjustScreenSize(final TerminalSize p2)
@@ -206,7 +329,7 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
         try
 		{
             screen.stopScreen();
-            running = false;
+            //running = false;
         }
 		catch (IOException e)
 		{
@@ -217,7 +340,6 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 
     private void executeCommand()
 	{
-
         String command = inputer.getInput().trim();
         if (command.length() > 0)
 		{
@@ -243,125 +365,11 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
 
     public void process() throws IOException
 	{
-        if (running)
-		{
-            return;
-        }
-        running = true;
         screen.setTabBehaviour(TabBehaviour.CONVERT_TO_FOUR_SPACES);
         screen.startScreen();
 		inputer = new Inputer(screen);
         inputer.updateInput();
-        while (true)
-		{
-            KeyStroke key = screen.readInput();
-            if (key != null)
-			{
-                switch (key.getKeyType())
-				{
-                    case Character:
-						inputStream.write((byte)key.getCharacter().charValue());
-                        inputer.append(key.getCharacter());
-                        break;
-                    case Backspace:
-                        // println("Backspace");
-						inputStream.deleteLast();
-                        inputer.delete();
-                        break;
-                    case ArrowUp:
-                        if (this.scrollMode())
-						{
-                            screen.scrollLines(-1);
-							screen.refreshBuffer();
-							screen.refreshFrame();
-                        }
-						else
-						{
-                            inputer.clear();
-							inputStream.clear();
-                            historyIndex = Math.max(0, historyIndex - 1);
-                            if (history.size() > 0)
-							{
-								inputStream.wrap(history.get(historyIndex).getBytes());
-                                inputer.wrap(history.get(historyIndex));
-                                inputer.gotoEnd();
-                            }
-							
-                        }
-                        break;
-                    case ArrowDown:
-                        if (this.scrollMode())
-						{
-                            screen.scrollLines(1);
-							screen.refreshBuffer();
-							screen.refreshFrame();
-                        }
-						else
-						{
-                            inputer.clear();
-							inputStream.clear();
-                            if (historyIndex + 1 == history.size())
-							{
-                                inputer.wrap("");
-                                inputer.gotoEnd();
-                                historyIndex = history.size();
-                                break;
-                            }
-							else if (historyIndex + 1 > history.size())
-							{
-                                break;
-                            }
-                            // println(history.size()+" "+historyIndex);
-                            historyIndex = Math.max(0, Math.min(history.size() - 1, historyIndex + 1));
-                            if (history.size() > 0)
-							{
-								inputStream.wrap(history.get(historyIndex).getBytes());
-                                inputer.wrap(history.get(historyIndex));
-                                inputer.gotoEnd();
-                            }
-                        }
-                        break;
-                    case ArrowLeft:
-						inputer.goLeft();
-                        break;
-                    case ArrowRight:
-                        // println(+terminalBuffer.length() + " " + inputStartIndex + " " +
-                        // inputCursor + " " + screen.getTerminalSize().getColumns());
-                        inputer.goRight();
-                        break;
-                    case PageDown:
-                        screen.pageDown(1);
-                        break;
-                    case PageUp:
-                        screen.pageUp(1);
-                        break;
-                    case Tab:
-                        break;
-                    case Enter:
-                        executeCommand();
-						inputStream.write((byte)'\n');
-						inputer.clear();
-                        break;
-                    case Escape:
-                        if (this.scrollMode())
-						{
-                            this.leaveScrollMode();
-                        }
-						else
-						{
-                            this.enterScrollMode();
-                        }
-                        break;
-                    case Home:
-                        inputer.goToStart();
-                        break;
-                    case End:
-                        inputer.gotoEnd();
-                        break;
-                }
-                inputer.updateInput();
-            }
-        }
+        new Thread(readThread, "read").start();
     }
 
     private void enterScrollMode()
@@ -374,7 +382,7 @@ public class BasicTerminal implements TerminalResizeListener,Runnable
         this.scrollMode = false;
     }
 
-    private boolean scrollMode()
+    private boolean isInScrollMode()
 	{
         return this.scrollMode;
     }
