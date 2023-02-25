@@ -12,13 +12,19 @@ public class TestMain
 
 
     public static void main(String[] args) throws Exception{
+		System.console().readPassword();
 		inputReader=new MyInputReader();
 		terminal = new BasicTerminal(inputReader);
 		terminal.process();
 		System.out.println("输入帐号");
 		Scanner sc=new Scanner(System.in);
 		String account=sc.next();
-		System.out.println("ffff "+account);
+		System.out.println("读取到的帐号是 "+account);
+		System.out.println("输入密码");
+		terminal.disableInputVisibility();
+		String password=sc.next();
+		terminal.enableInputVisibility();
+		System.out.println("读取到的密码是 "+password);
 		
     }
 	

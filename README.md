@@ -1,7 +1,8 @@
 # IOSTerm-X
 [![](https://jitpack.io/v/Saint-Theana/IOSTerm-X.svg)](https://jitpack.io/#Saint-Theana/IOSTerm-X)
 ![gif](https://raw.githubusercontent.com/Saint-Theana/IOSTerm-X/master/xxx.gif)
-An I/O seperated terminal Text-Gui interface based on [lanterna](https://github.com/mabe02/lanterna)
+
+# An I/O seperated terminal Text-Gui interface based on [lanterna](https://github.com/mabe02/lanterna)
 
 To add this library:
 [jitpack](https://jitpack.io/#Saint-Theana/IOSTerm-X)
@@ -18,7 +19,7 @@ dependencies {
 }
 ```
 
-#implemented feature:
+# implemented feature:
  - [x] 1.Chiness Japeness Korean character length adapt.
  - [x] 2.Auto word wrapping.
  - [x] 3.Page scroll up/down
