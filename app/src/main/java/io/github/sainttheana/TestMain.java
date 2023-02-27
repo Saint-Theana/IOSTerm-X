@@ -12,10 +12,14 @@ public class TestMain
 
 
     public static void main(String[] args) throws Exception{
-		System.console().readPassword();
 		inputReader=new MyInputReader();
 		terminal = new BasicTerminal(inputReader);
+		terminal.setOverrideStandardErr(true);
+		terminal.setOverrideStandardOut(true);
+		terminal.setOverrideStandardIn(true);
 		terminal.process();
+		terminal.out.println("hello world");
+		terminal.out.println("hello IOSTerm-X");
 		System.out.println("输入帐号");
 		Scanner sc=new Scanner(System.in);
 		String account=sc.next();

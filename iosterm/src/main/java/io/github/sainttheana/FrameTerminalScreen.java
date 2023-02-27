@@ -288,6 +288,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			}
 		}
 		setLastLine(lineBuffer);
+		refreshBuffer();
+		refreshFrame();
 		//tryRefresh();
 	}
 

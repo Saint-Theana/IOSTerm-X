@@ -15,7 +15,7 @@ lallprojects {
 }
 	
 dependencies {
-	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.4'
+	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.5'
 }
 ```
 
@@ -44,24 +44,33 @@ BasicTerminal.InputReader inputReader = new BasicTerminal.InputReader(){
 
 ## 2: start the Terminal
 ```java
-   BasicTerminal terminal = new BasicTerminal(this);
-   terminal.process();
+BasicTerminal terminal = new BasicTerminal(this);
+//you can decide if terminal overrides System.in/System.out/System.err by using
+terminal.setOverrideStandardErr(true);
+terminal.setOverrideStandardOut(true);
+terminal.setOverrideStandardIn(true);
+//these are disabled by default.
+//important: if you chose not to enable overriding System.err,standard err will mess up the terminal.so you must seperate it by using "java ..... -jar xxxx.jar 2>err.log"
+//if you chose to enable overriding System.err,when you app crashed you might not be able to recieve any infomation if the terminal failed to start or terminal crashed.
+terminal.process();
 ```
 
 ## 3: how to write message to the terminal?
 ```java
-    //terminal will override System.out and System.err
-    //have fun.
-    System.out.print("Hello world.");
-    System.out.printn("Hello world.");
-    System.err.print("Hello world.");
-    System.err.printn("Hello world.");
+//if terminal overrides System.out and System.err
+System.out.print("Hello world.");
+System.out.printn("Hello world.");
+System.err.print("Hello world.");
+System.err.printn("Hello world.");
+//if not
+terminal.out.print("hello world");
+terminal.out.println("hello world");
 ```
 
 ## 4: how to read input manually?
 ```java
 //there are two ways to do that
-//1.intercept terminal's reader.(recomanded)
+//1.intercept terminal's reader.
 terminal.interceptReader(new BasicTerminal.InputReader(){
 	@Override
 	public void read(String input)
@@ -72,7 +81,7 @@ terminal.interceptReader(new BasicTerminal.InputReader(){
 });
 
 
-//2.terminal overrides System.in so you can use Scanner
+//2.if System.in was terminal overriden,you can use Scanner
 //notice:this does not behave like standard input,scanner will read all current input line even before you called new Scanner(System.in);
 //notice:since there is no way to know when user uses a Scanner,so the input will also call terminals reader.
 Scanner s=new Scanner(System.in);

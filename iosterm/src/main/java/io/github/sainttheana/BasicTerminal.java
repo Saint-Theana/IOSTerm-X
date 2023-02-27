@@ -55,7 +55,41 @@ public class BasicTerminal
     private boolean scrollMode;
 	private boolean inputVisibility=true;
 	private long lastResizeTime;
+	private boolean overrideStandardIn=false;
+	private boolean overrideStandardErr=false;
+	private boolean overrideStandardOut=false;
+	public TerminalPrintStream out;
 
+	public void setOverrideStandardOut(boolean overrideStandardOut)
+	{
+		this.overrideStandardOut = overrideStandardOut;
+	}
+
+	public boolean isOverrideStandardOut()
+	{
+		return overrideStandardOut;
+	}
+
+	public void setOverrideStandardErr(boolean overrideStandardErr)
+	{
+		this.overrideStandardErr = overrideStandardErr;
+	}
+
+	public boolean isOverrideStandardErr()
+	{
+		return overrideStandardErr;
+	}
+
+	public void setOverrideStandardIn(boolean overrideStandardIn)
+	{
+		this.overrideStandardIn = overrideStandardIn;
+	}
+
+	public boolean isOverrideStandardIn()
+	{
+		return overrideStandardIn;
+	}
+	
 	public void disableInputVisibility()
 	{
 		inputVisibility = false;
@@ -239,11 +273,7 @@ public class BasicTerminal
 			new DefaultTerminalFactory(System.out, System.in, Charset.forName("UTF8"));
         Terminal term = factory.createTerminal();
         screen = new FrameTerminalScreen(term);
-		TerminalPrintStream a=new TerminalPrintStream(screen);
-		inputStream = new TerminalInputStream();
-		System.setOut(a);
-		System.setErr(a);
-		System.setIn(inputStream);
+		
         this.adjustScreenSize(screen.getTerminalSize());
         this.reader = reader;
 		this.currentReader = reader;
@@ -269,6 +299,9 @@ public class BasicTerminal
 	{
         try
 		{
+			if(!file.exists()){
+				file.createNewFile();
+			}
             InputStreamReader reader = new InputStreamReader(new FileInputStream(file));
             BufferedReader br = new BufferedReader(reader);
             String line = br.readLine();
@@ -381,9 +414,21 @@ public class BasicTerminal
         }
     }
 
+	
 
     public void process() throws IOException
 	{
+		out=new TerminalPrintStream(screen);
+		inputStream = new TerminalInputStream();
+		if(overrideStandardIn){
+			System.setIn(inputStream);
+		}
+		if(overrideStandardOut){
+		    System.setOut(out);
+		}
+		if(overrideStandardErr){
+		    System.setErr(out);
+		}
         screen.setTabBehaviour(TabBehaviour.CONVERT_TO_FOUR_SPACES);
         screen.startScreen();
 		inputer = new Inputer(screen);
