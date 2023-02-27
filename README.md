@@ -51,7 +51,7 @@ terminal.setOverrideStandardOut(true);
 terminal.setOverrideStandardIn(true);
 //these are disabled by default.
 //important: if you chose not to enable overriding System.err,standard err will mess up the terminal.so you must seperate it by using "java ..... -jar xxxx.jar 2>err.log"
-//if you chose to enable overriding System.err,when you app crashed you might not be able to recieve any infomation if the terminal failed to start or terminal crashed.
+//if you chose to enable overriding System.err,when your app or terminal crashed while terminal is starting,you might not be able to recieve any infomation.
 terminal.process();
 ```
 
