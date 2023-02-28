@@ -29,6 +29,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.Collections;
+import java.util.Collection;
 
 public class Inputer implements ThreadFactory
 {
@@ -186,7 +187,7 @@ public class Inputer implements ThreadFactory
 	{
 		StringBuilder sb=new StringBuilder();
 		int offset=inputContentDisplayStartIndex;
-		for (char c:Collections.synchronizedList(charList))
+		for (char c:clone(charList))
 		{
 			if (offset == 0)
 			{
@@ -217,6 +218,13 @@ public class Inputer implements ThreadFactory
 
 		}
 		return sb.toString();
+	}
+
+	private List<Character> clone(List<Character> charList)
+	{
+		List<Character> chars=new ArrayList<Character>();
+		chars.addAll(charList);
+		return chars;
 	}
 
 	private void clearAllCharacterInInputLine()

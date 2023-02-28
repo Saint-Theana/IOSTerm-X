@@ -175,7 +175,6 @@ public class BasicTerminal
 									inputer.wrap(history.get(historyIndex));
 									inputer.gotoEnd();
 								}
-
 							}
 							break;
 						case ArrowDown:
