@@ -15,7 +15,7 @@ lallprojects {
 }
 	
 dependencies {
-	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.9'
+	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.10'
 }
 ```
 
