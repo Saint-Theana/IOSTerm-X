@@ -174,8 +174,8 @@ public class BasicTerminal implements ThreadFactory
 							}
 							else
 							{
-								inputer.clear();
 								inputStream.clear();
+								inputer.clear();
 								historyIndex = Math.max(0, historyIndex - 1);
 								if (history.size() > 0)
 								{
@@ -194,8 +194,8 @@ public class BasicTerminal implements ThreadFactory
 							}
 							else
 							{
-								inputer.clear();
 								inputStream.clear();
+								inputer.clear();
 								if (historyIndex + 1 == history.size())
 								{
 									inputer.wrap("");
@@ -234,9 +234,9 @@ public class BasicTerminal implements ThreadFactory
 						case Tab:
 							break;
 						case Enter:
-							executeCommand();
 							inputStream.write((byte)'\n');
 							inputer.clear();
+							executeCommand();
 							break;
 						case Escape:
 							if (isInScrollMode())
