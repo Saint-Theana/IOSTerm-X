@@ -16,7 +16,7 @@
 
  Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
  additional information or have any questions
-*/
+ */
 package io.github.sainttheana;
 
 import com.googlecode.lanterna.TerminalPosition;
@@ -30,6 +30,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.Collections;
 import java.util.Collection;
+import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ListIterator;
 
 public class Inputer implements ThreadFactory
 {
@@ -62,7 +66,7 @@ public class Inputer implements ThreadFactory
 
 	private int cursorDisplayStartIndex;
 
-	private List<Character> charList =new ArrayList<Character>();
+	private volatile List<Character> charList =new ArrayList<Character>();
 
 	private int currentIndexOfInput;
 
@@ -91,86 +95,82 @@ public class Inputer implements ThreadFactory
 
 	public void updateInput()
 	{
-		executor.execute(new Runnable(){
-				@Override
-				public void run()
-				{
-					updateInputInternal();
-				}
-			});
+		synchronized(this){
+		    updateInputInternal();
+		}
 	}
 
 	private void updateInputInternal()
 	{
-		synchronized (this)
+		
+		String string= cursorText + getDisplay();
+		char[] array=string.toCharArray();
+		String currentLine="";
+		int currenLinetSize=0;
+		for (int i=0;i < array.length;i++)
 		{
-			clearAllCharacterInInputLine();
-			String string= cursorText + getDisplay();
-			char[] array=string.toCharArray();
-			String currentLine="";
-			int currenLinetSize=0;
-			for (int i=0;i < array.length;i++)
+			//System.err.println("i "+i);
+			char character=array[i];
+			int displaySizeOfCharacter=0;
+			//System.err.println(character);
+			if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
 			{
-				//System.err.println("i "+i);
-				char character=array[i];
-				int displaySizeOfCharacter=0;
-				//System.err.println(character);
-				if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
+				int length=TerminalTextUtils.getANSIControlSequenceLength(string, i);
+				//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
+				//System.err.println(length);
+				//currentLine+=character;
+				int end=i + length;
+				for (int i1=i;i1 < end;i1++)
 				{
-					int length=TerminalTextUtils.getANSIControlSequenceLength(string, i);
-					//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
-					//System.err.println(length);
-					//currentLine+=character;
-					int end=i + length;
-					for (int i1=i;i1 < end;i1++)
-					{
-						//System.err.println("i1 " + i1);
-						currentLine += array[i1];
-					}
-					i += length - 1;
-					continue;
+					//System.err.println("i1 " + i1);
+					currentLine += array[i1];
 				}
-				else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
-				{
-					displaySizeOfCharacter = 2;
-				}
-				else//一个字符宽度
-				{
-					displaySizeOfCharacter = 1;
-				}
-
-				if (currenLinetSize + displaySizeOfCharacter > sizeOfLine)
-				{
-					//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
-					//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
-					updateCursorPosition();
-					displayInputLine(currentLine);
-					return;
-				}
-				if (currenLinetSize + displaySizeOfCharacter == sizeOfLine)
-				{
-					currentLine += character;
-					updateCursorPosition();
-					displayInputLine(currentLine);
-					return;
-				}
-				else
-				{
-					//还没到一行的宽度所以不写入
-					currentLine += character;
-					currenLinetSize += displaySizeOfCharacter;
-				}
+				i += length - 1;
+				continue;
 			}
-			updateCursorPosition();
-			if (!inputVisibility)
+			else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
 			{
-				displayInputLine(cursorText + currentLine.substring(cursorText.length()).replaceAll(".", "*"));
+				displaySizeOfCharacter = 2;
+			}
+			else//一个字符宽度
+			{
+				displaySizeOfCharacter = 1;
+			}
+
+			if (currenLinetSize + displaySizeOfCharacter > sizeOfLine)
+			{
+				//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
+				//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
+				updateCursorPosition();
+				displayInputLine(currentLine);
+				return;
+			}
+			if (currenLinetSize + displaySizeOfCharacter == sizeOfLine)
+			{
+				currentLine += character;
+				updateCursorPosition();
+				displayInputLine(currentLine);
+				return;
 			}
 			else
 			{
-				displayInputLine(currentLine);
+				//还没到一行的宽度所以不写入
+				currentLine += character;
+				currenLinetSize += displaySizeOfCharacter;
 			}
 		}
+		updateCursorPosition();
+		clearAllCharacterInInputLine();
+		
+		if (!inputVisibility)
+		{
+			displayInputLine(cursorText + currentLine.substring(cursorText.length()).replaceAll(".", "*"));
+		}
+		else
+		{
+			displayInputLine(currentLine);
+		}
+		
 	}
 
 	private void updateCursorPosition()
@@ -179,13 +179,17 @@ public class Inputer implements ThreadFactory
 	}
 
 
-
 	private String getDisplay()
 	{
 		StringBuilder sb=new StringBuilder();
 		int offset=inputContentDisplayStartIndex;
-		for (char c:clone(charList))
+		ListIterator<Character> a=clone(charList).listIterator();
+		for (;a.hasNext();)
 		{
+			Character c=a.next();
+			if(c==null){
+				continue;
+			}
 			if (offset == 0)
 			{
 				sb.append(c);
@@ -220,9 +224,7 @@ public class Inputer implements ThreadFactory
 	private List<Character> clone(List<Character> charList)
 	{
 		List<Character> chars=new ArrayList<Character>();
-		for(Character t:charList){
-			chars.add(t);
-		}
+		chars.addAll(charList);
 		return chars;
 	}
 
@@ -236,8 +238,10 @@ public class Inputer implements ThreadFactory
         screen.updateInput(cursorText + empty.substring(0, screen.getTerminalSize().getColumns() + 1));
 	}
 
+	
 	private void displayInputLine(String string)
 	{
+		
 		//System.err.println(inputRow+"  "+string);
 		screen.updateInput(string);
 
@@ -260,6 +264,7 @@ public class Inputer implements ThreadFactory
 
 	public void append(Character character)
 	{
+
 		charList.add(currentIndexOfInput, character);
 		currentIndexOfInput++;
 		int sizeOfCharacter=0;

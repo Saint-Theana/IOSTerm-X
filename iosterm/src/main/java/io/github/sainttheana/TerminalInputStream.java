@@ -16,19 +16,23 @@
 
  Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
  additional information or have any questions
-*/
+ */
 package io.github.sainttheana;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class TerminalInputStream extends InputStream
 {
-	public List<Byte> bytes=new ArrayList<>();
+	public ArrayBlockingQueue<Byte> bytes=new ArrayBlockingQueue<>(2048);
 
 	public void wrap(byte[] in)
 	{
+		bytes.clear();
 		for (byte b:in)
 		{
 			bytes.add(b);
@@ -44,21 +48,17 @@ public class TerminalInputStream extends InputStream
 	@Override
 	public int read(byte[] b) throws IOException
 	{
-		while (bytes.size() == 0)
+		int length =available() > b.length ?b.length: available();
+		for (int i=0;i < length;i++)
 		{
 			try
 			{
-				Thread.currentThread().sleep(100);
+				b[i] = bytes.take();
 			}
 			catch (InterruptedException e)
 			{
 				e.printStackTrace();
 			}
-		}
-		int length =available() > b.length ?b.length: available();
-		for (int i=0;i < length;i++)
-		{
-			b[i] = bytes.remove(0);
 		}
 		return length;
 	}
@@ -68,27 +68,22 @@ public class TerminalInputStream extends InputStream
 	{
 		while (bytes.size() == 0)
 		{
+
+		}
+		int length =available() > b.length ?b.length: available();
+		for (int i=0;i < length;i++)
+		{
 			try
 			{
-				Thread.currentThread().sleep(100);
+				b[off + i] = bytes.take();
 			}
 			catch (InterruptedException e)
 			{
 				e.printStackTrace();
 			}
 		}
-		int length =available() > b.length ?b.length: available();
-		for (int i=0;i < length;i++)
-		{
-			b[off + i] = bytes.remove(0);
-		}
 		return length;
 	}
-
-
-
-
-
 
 
 	public void clear()
@@ -113,18 +108,15 @@ public class TerminalInputStream extends InputStream
 	@Override
 	public int read() throws IOException
 	{
-		while (bytes.size() == 0)
+		try
 		{
-			try
-			{
-				Thread.currentThread().sleep(100);
-			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
+			return bytes.take();
 		}
-		return bytes.remove(0);
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+		return -1;
 	}
 
 }

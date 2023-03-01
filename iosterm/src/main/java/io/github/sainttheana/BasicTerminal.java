@@ -47,7 +47,6 @@ public class BasicTerminal implements ThreadFactory
 	{
 		return new Thread(p1,"read");
 	}
-	
 
 	private TerminalInputStream inputStream;
 	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
@@ -57,8 +56,8 @@ public class BasicTerminal implements ThreadFactory
     private Inputer inputer;
     private LimitedList<String> history = new LimitedList<>(100);
 	// private boolean running = false;
-    private BasicTerminal.InputReader reader;
-	private BasicTerminal.InputReader currentReader;
+  //  private BasicTerminal.InputReader reader;
+	//private BasicTerminal.InputReader currentReader;
     private boolean scrollMode;
 	private boolean inputVisibility=true;
 	private long lastResizeTime;
@@ -118,10 +117,6 @@ public class BasicTerminal implements ThreadFactory
 				try
 				{
 					TerminalSize size=resizeQueue.take();
-					//Thread.currentThread().sleep(100);
-					//if(System.currentTimeMillis()-lastResizeTime<100){
-					//continue;
-					//}
 					screen.onResize();
 					if (inputer != null)
 					{
@@ -136,6 +131,8 @@ public class BasicTerminal implements ThreadFactory
 		}
 	};
 
+	
+	//private StringBuilder inputBuffer=new StringBuilder();
 
 	Runnable readThread=new Runnable(){
 		@Override
@@ -157,12 +154,12 @@ public class BasicTerminal implements ThreadFactory
 					switch (key.getKeyType())
 					{
 						case Character:
-							inputStream.write((byte)key.getCharacter().charValue());
+							//inputBuffer.append(key.getCharacter());
 							inputer.append(key.getCharacter());
 							break;
 						case Backspace:
 							// println("Backspace");
-							inputStream.deleteLast();
+							//inputBuffer.deleteCharAt(inputBuffer.length()-1);
 							inputer.delete();
 							break;
 						case ArrowUp:
@@ -174,12 +171,12 @@ public class BasicTerminal implements ThreadFactory
 							}
 							else
 							{
-								inputStream.clear();
+								//inputBuffer.delete(0,inputBuffer.length()-1);
 								inputer.clear();
 								historyIndex = Math.max(0, historyIndex - 1);
 								if (history.size() > 0)
 								{
-									inputStream.wrap(history.get(historyIndex).getBytes());
+									//inputBuffer.append(history.get(historyIndex).getBytes());
 									inputer.wrap(history.get(historyIndex));
 									inputer.gotoEnd();
 								}
@@ -194,7 +191,7 @@ public class BasicTerminal implements ThreadFactory
 							}
 							else
 							{
-								inputStream.clear();
+								//inputStream.clear();
 								inputer.clear();
 								if (historyIndex + 1 == history.size())
 								{
@@ -211,7 +208,7 @@ public class BasicTerminal implements ThreadFactory
 								historyIndex = Math.max(0, Math.min(history.size() - 1, historyIndex + 1));
 								if (history.size() > 0)
 								{
-									inputStream.wrap(history.get(historyIndex).getBytes());
+									//inputStream.wrap(history.get(historyIndex).getBytes());
 									inputer.wrap(history.get(historyIndex));
 									inputer.gotoEnd();
 								}
@@ -234,8 +231,7 @@ public class BasicTerminal implements ThreadFactory
 						case Tab:
 							break;
 						case Enter:
-							inputStream.write((byte)'\n');
-							inputStream.clear();
+							//inputStream.write((byte)'\n');
 							executeCommand();
 							inputer.clear();
 							break;
@@ -270,12 +266,13 @@ public class BasicTerminal implements ThreadFactory
 		public void onResized(Terminal p1, TerminalSize p2)
 		{
 			//System.err.println(p2);
-			screen.doResizeIfNecessary();
+			
 			adjustScreenSize(p2);
+			screen.doResizeIfNecessary();
 		}
 	}
 
-    public BasicTerminal(InputReader reader) throws Exception
+    public BasicTerminal(/*InputReader reader*/) throws Exception
 	{
         DefaultTerminalFactory factory =
 			new DefaultTerminalFactory(System.out, System.in, Charset.forName("UTF8"));
@@ -283,8 +280,8 @@ public class BasicTerminal implements ThreadFactory
         screen = new FrameTerminalScreen(term);
 		
         this.adjustScreenSize(screen.getTerminalSize());
-        this.reader = reader;
-		this.currentReader = reader;
+       // this.reader = reader;
+		//this.currentReader = reader;
         initHistory(new File(".history"));
         term.addResizeListener(new MyTerminalResizeListener());
 		new Thread(resizeThread, "resize").start();
@@ -349,7 +346,7 @@ public class BasicTerminal implements ThreadFactory
         return screen.getTerminalSize().getColumns();
     }
 
-	public void interceptReader(BasicTerminal.InputReader reader)
+	/*public void interceptReader(BasicTerminal.InputReader reader)
 	{
         this.currentReader = reader;
     }
@@ -358,11 +355,12 @@ public class BasicTerminal implements ThreadFactory
 	{
         this.currentReader = this.reader;
     }
+	*/
 
-    public interface InputReader
-	{
-        void read(String input);
-    }
+//    public interface InputReader
+//	{
+//        void read(String input);
+//    }
 
     public void setCursorText(String cursorText)
 	{
@@ -371,16 +369,21 @@ public class BasicTerminal implements ThreadFactory
 
     private void executeCommand(final String commandBuffer)
 	{
-        if (currentReader == null)
+      /*  if (currentReader == null)
 		{
             return;
         }
+		*/
 		if (inputVisibility)
 		{
 			saveHistory(new File(".history"));
 			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
             System.out.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
 		}
+		//inputStream.clear();
+		//System.out.println(commandBuffer);
+		inputStream.wrap(commandBuffer.getBytes());
+		/*
 		this.executor.execute(new Runnable(){
 				@Override
 				public void run()
@@ -388,6 +391,7 @@ public class BasicTerminal implements ThreadFactory
 					currentReader.read(commandBuffer);
 				}
 			});
+			*/
     }
 
     public void destroy()
@@ -410,7 +414,6 @@ public class BasicTerminal implements ThreadFactory
         if (command.length() > 0)
 		{
             // println(command);
-
 			if (inputVisibility)
 			{
                 history.add(command);
@@ -419,7 +422,7 @@ public class BasicTerminal implements ThreadFactory
 			{
 				history.add(command.replaceAll(".", "*"));
 			}
-			executeCommand(command);
+			executeCommand(command+"\n");
             historyIndex = history.size();
         }
 		else
