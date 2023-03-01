@@ -30,12 +30,26 @@ public class TerminalInputStream extends InputStream
 {
 	public ArrayBlockingQueue<Byte> bytes=new ArrayBlockingQueue<>(2048);
 
+	@Override
+	public boolean markSupported()
+	{
+		return false;
+	}
+
+	
 	public void wrap(byte[] in)
 	{
 		bytes.clear();
 		for (byte b:in)
 		{
-			bytes.add(b);
+			try
+			{
+				bytes.put(b);
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -49,6 +63,8 @@ public class TerminalInputStream extends InputStream
 	public int read(byte[] b) throws IOException
 	{
 		int length =available() > b.length ?b.length: available();
+		//at least read one;
+		length=length==0?1:length;
 		for (int i=0;i < length;i++)
 		{
 			try
@@ -66,7 +82,9 @@ public class TerminalInputStream extends InputStream
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException
 	{
-		int length =available() > b.length ?b.length: available();
+		int length =available() > len ?len: available();
+		length=length==0?1:length;
+		//at least read one;
 		for (int i=0;i < length;i++)
 		{
 			try
@@ -87,19 +105,6 @@ public class TerminalInputStream extends InputStream
 		bytes.clear();
 	}
 
-	public void deleteLast()
-	{
-		if (bytes.size() == 0)
-		{
-			return;
-		}
-		bytes.remove(bytes.size() - 1);
-	}
-
-	public void write(byte a)
-	{
-		bytes.add(a);
-	}
 
 	@Override
 	public int read() throws IOException
