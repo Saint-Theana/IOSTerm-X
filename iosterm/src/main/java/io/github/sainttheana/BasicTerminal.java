@@ -235,8 +235,9 @@ public class BasicTerminal implements ThreadFactory
 							break;
 						case Enter:
 							inputStream.write((byte)'\n');
-							inputer.clear();
+							inputStream.clear();
 							executeCommand();
+							inputer.clear();
 							break;
 						case Escape:
 							if (isInScrollMode())
