@@ -42,10 +42,7 @@ public class Inputer implements ThreadFactory
 
 	private ThreadPoolExecutor executor=new ThreadPoolExecutor(10, 30, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(10), this, new ThreadPoolExecutor.DiscardOldestPolicy());
 
-
-
 	private String empty ="                                                                                                                                                                                                         ";
-
 
 	private FrameTerminalScreen screen;
 
@@ -223,7 +220,9 @@ public class Inputer implements ThreadFactory
 	private List<Character> clone(List<Character> charList)
 	{
 		List<Character> chars=new ArrayList<Character>();
-		chars.addAll(charList);
+		for(Character t:charList){
+			chars.add(t);
+		}
 		return chars;
 	}
 

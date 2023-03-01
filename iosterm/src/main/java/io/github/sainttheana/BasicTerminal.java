@@ -39,12 +39,19 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.text.StringEscapeUtils;
 import java.util.Queue;
 
-public class BasicTerminal
+public class BasicTerminal implements ThreadFactory
 {
+
+	@Override
+	public Thread newThread(Runnable p1)
+	{
+		return new Thread(p1,"read");
+	}
+	
 
 	private TerminalInputStream inputStream;
 	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
-	//private ThreadPoolExecutor executor=new ThreadPoolExecutor(1, 1, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(10), this, new ThreadPoolExecutor.AbortPolicy());
+	private ThreadPoolExecutor executor=new ThreadPoolExecutor(10, 20, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(10), this, new ThreadPoolExecutor.AbortPolicy());
 	private FrameTerminalScreen screen;
     private int historyIndex = 0;
     private Inputer inputer;
@@ -128,6 +135,7 @@ public class BasicTerminal
 			}
 		}
 	};
+
 
 	Runnable readThread=new Runnable(){
 		@Override
@@ -360,7 +368,7 @@ public class BasicTerminal
         inputer.setCursorText(cursorText);
     }
 
-    private void executeCommand(String commandBuffer)
+    private void executeCommand(final String commandBuffer)
 	{
         if (currentReader == null)
 		{
@@ -372,7 +380,13 @@ public class BasicTerminal
 			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
             System.out.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
 		}
-        this.currentReader.read(commandBuffer);
+		this.executor.execute(new Runnable(){
+				@Override
+				public void run()
+				{
+					currentReader.read(commandBuffer);
+				}
+			});
     }
 
     public void destroy()
