@@ -66,10 +66,6 @@ public class TerminalInputStream extends InputStream
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException
 	{
-		while (bytes.size() == 0)
-		{
-
-		}
 		int length =available() > b.length ?b.length: available();
 		for (int i=0;i < length;i++)
 		{
