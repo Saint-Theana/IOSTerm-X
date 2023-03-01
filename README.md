@@ -84,9 +84,9 @@ terminal.interceptReader(new BasicTerminal.InputReader(){
 //2.if System.in was overriden by the terminal,you can use Scanner
 //notice:this does not behave like standard input,scanner will read all current input line even before you called new Scanner(System.in);
 //notice:since there is no way to know when user uses a Scanner,so the input will also call terminals reader.
-//important:arrow up/down will mess up input.
+//important:arrow up/down will mess up input content.
 Scanner s=new Scanner(System.in);
-System.out.println(s.next());
+System.out.println(s.nextLine());
 ```
 
 ## 5: anything else?
