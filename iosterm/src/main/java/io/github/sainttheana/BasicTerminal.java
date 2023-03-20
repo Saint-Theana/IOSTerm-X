@@ -38,6 +38,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.text.StringEscapeUtils;
 import java.util.Queue;
+import com.googlecode.lanterna.terminal.ansi.UnixLikeTerminal;
+import com.googlecode.lanterna.input.KeyType;
 
 public class BasicTerminal implements ThreadFactory
 {
@@ -144,6 +146,7 @@ public class BasicTerminal implements ThreadFactory
 				try
 				{
 					key = screen.readInput();
+				
 				}
 				catch (IOException e)
 				{
@@ -151,8 +154,23 @@ public class BasicTerminal implements ThreadFactory
 				}
 				if (key != null)
 				{
+					//System.err.println(key.getKeyType());
+					if(key.isCtrlDown()&&key.getKeyType()==KeyType.Character){
+						switch (key.getCharacter())
+						{
+							case 'f':
+								screen.freeze();
+								break;
+							
+						
+						}
+						continue;
+					}
+					
 					switch (key.getKeyType())
 					{
+			
+							
 						case Character:
 							//inputBuffer.append(key.getCharacter());
 							inputer.append(key.getCharacter());
@@ -258,8 +276,6 @@ public class BasicTerminal implements ThreadFactory
 		}
 	};
 
-
-
 	private class MyTerminalResizeListener implements TerminalResizeListener
 	{
 		@Override
@@ -276,7 +292,9 @@ public class BasicTerminal implements ThreadFactory
 	{
         DefaultTerminalFactory factory =
 			new DefaultTerminalFactory(System.out, System.in, Charset.forName("UTF8"));
+		//factory.setUnixTerminalCtrlCBehaviour(UnixLikeTerminal.CtrlCBehaviour.TRAP);
         Terminal term = factory.createTerminal();
+		
         screen = new FrameTerminalScreen(term);
 		
         this.adjustScreenSize(screen.getTerminalSize());
@@ -369,29 +387,14 @@ public class BasicTerminal implements ThreadFactory
 
     private void executeCommand(final String commandBuffer)
 	{
-      /*  if (currentReader == null)
-		{
-            return;
-        }
-		*/
+
 		if (inputVisibility)
 		{
 			saveHistory(new File(".history"));
 			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
             System.out.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
 		}
-		//inputStream.clear();
-		//System.out.println(commandBuffer);
 		inputStream.wrap(commandBuffer.getBytes());
-		/*
-		this.executor.execute(new Runnable(){
-				@Override
-				public void run()
-				{
-					currentReader.read(commandBuffer);
-				}
-			});
-			*/
     }
 
     public void destroy()

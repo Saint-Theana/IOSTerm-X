@@ -13,6 +13,14 @@ jar {
             'Main-Class': 'io.github.sainttheana.TestMain'
         )
     }
+	dependsOn configurations.runtimeClasspath
+	from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
 }
 
 run{
@@ -23,24 +31,13 @@ tasks.withType(Jar.class).configureEach {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-tasks.register('fatjar', Jar) {
-  
-  manifest.from jar.manifest
-  classifier = 'all'
-  from {
-    configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-  } {
-    
-  }
-  with jar
-}
 
 dependencies {
 	implementation 'com.googlecode.lanterna:lanterna:3.1.1'
 	implementation project(':iosterm')
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 }
-// end::dependencies[]
 
-// tag::wrapper[]
-// end::wrapper[]
+
+
+

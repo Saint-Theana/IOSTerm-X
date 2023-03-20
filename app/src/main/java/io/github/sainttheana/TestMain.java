@@ -14,7 +14,7 @@ public class TestMain
     public static void main(String[] args) throws Exception{
 		//inputReader=new MyInputReader();
 		terminal = new BasicTerminal();
-		terminal.setOverrideStandardErr(true);
+		terminal.setOverrideStandardErr(false);
 		terminal.setOverrideStandardOut(true);
 		terminal.setOverrideStandardIn(true);
 		terminal.process();
@@ -29,7 +29,10 @@ public class TestMain
 		String password=sc.nextLine();
 		terminal.enableInputVisibility();
 		System.out.println("读取到的密码是 "+password);
-		
+		int i=0;
+		while(true){
+			System.out.println("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"+i++);
+		}
     }
 	
 	
