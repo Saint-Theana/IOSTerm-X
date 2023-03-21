@@ -187,11 +187,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	public void println(final String p0)
 	{
-		//should not proceed while resizing
-//		executor.execute(new Runnable(){
-//				@Override
-//				public void run()
-//				{
 		try
 		{
 			printQueue.put(new Action(ActionType.PrintLn, p0));
@@ -200,8 +195,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
-//				}
-//			});
 	}
 
 
@@ -286,16 +279,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 				lineBuffer += t;
 			}
 		}
-		//setLastLine(lineBuffer);
-
-		//tryRefresh();
 	}
-
-//	private void tryRefresh()
-//	{
-//		refreshBuffer();
-//		refreshFrame();
-//	}
 
 
 	private void setLastLine(String string)
@@ -395,8 +379,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		int contentIndex=0;
         for (int c = displayStartPosition; c < displayEndPosition; c += 1)
 		{
-            //清空
-			////System.err.println("c: "+c);
             textGraphics.putCSIStyledString(0, c, a);
             if (contentIndex < buffer.size())
 			{
