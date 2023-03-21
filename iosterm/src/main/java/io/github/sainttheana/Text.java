@@ -4,18 +4,33 @@ import java.util.ArrayList;
 
 public class Text
 {
+	private int currentIndex=0;
+	
 	private LimitedList<String> contents =new LimitedList<String>(2000);
+
+	public void setCurrentIndex(int currentIndex)
+	{
+		this.currentIndex = currentIndex;
+	}
+
+	public int getCurrentIndex()
+	{
+		return currentIndex;
+	}
 
 	public List<String> getLastLines(int count)
 	{
 		List<String> t=new ArrayList<String>();
 		int size=contents.size();
+		int firstLine=0;
 		for(int i=0;i<=count;i++){
 			if(size-1-i<0){
 				break;
 			}
 			t.add(0,contents.get(size-1-i));
+			firstLine=size-1-i;
 		}
+		currentIndex=firstLine;
 		return t;
 	}
 
@@ -30,7 +45,8 @@ public class Text
 	
 	public List<String> getLines(int start,int count){
 		if(start>=contents.size()){
-			throw new IllegalStateException("start > contents size");
+			//throw new IllegalStateException("start > contents size");
+			start=contents.size()-1;
 		}
 		List<String> t=new ArrayList<String>();
 		for(int i=0;i<count;i++){
@@ -39,6 +55,7 @@ public class Text
 			}
 			t.add(contents.get(start+i));
 		}
+		currentIndex=start;
 		return t;
 	}
 	
@@ -46,5 +63,4 @@ public class Text
 	public int getSize(){
 		return contents.size();
 	}
-	
 }

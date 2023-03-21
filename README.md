@@ -41,6 +41,9 @@ terminal.setOverrideStandardOut(true);
 //if you chose to enable overriding System.err,when your app or terminal crashed while terminal is starting,you might not be able to recieve any infomation.
 terminal.process();
 ```
+## After that,a text gui interface will start.
+## remember,do not use gradle run to test it,do not ask why,try it and you will get why.
+
 
 ## 2: how to write message to the terminal?
 ```java
@@ -61,15 +64,20 @@ Scanner s=new Scanner(System.in);
 System.out.println(s.nextLine());
 ```
 
+## 4: how do I scroll the output?
+```
+first you need to type "ctrl + b" to enter browse mode.
+and then use up/down
+how to exit browse mode?type "ctrl + b" again or type esc.
+and if you wanna make terminal stop updating,type "ctrl + f",type agin to exit,same with esc.
+```
+
 ## 5: anything else?
 ```java
 //password input mode
 terminal.enableInputVisibility();
 terminal.disableInputVisibility();
 ```
-
-## After that,a text gui interface will start.
-## remember,do not use gradle run to test it,do not ask why,try it and you will get why.
 
 ## License
 ```

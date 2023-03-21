@@ -37,11 +37,36 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	private boolean refreshingFrame;
 
-	private boolean freezed=false;
+	private boolean frozen=false;
+
+	private boolean browsing =false;
+
+	public boolean isBrowsing()
+	{
+		return browsing;
+	}
+
+	public boolean isFrozen()
+	{
+		return frozen;
+	}
+	
+	public void browse()
+	{
+		browsing= !browsing;
+		if(!browsing){
+			refreshBuffer();
+			refreshFrame();
+		}
+	}
 
 	public void freeze()
 	{
-		freezed = !freezed;
+		frozen = !frozen;
+		if(!frozen){
+			refreshBuffer();
+			refreshFrame();
+		}
 	}
 
 
@@ -79,9 +104,9 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			{
 				Action action=printQueue.take();
 				long ts=System.currentTimeMillis();
-				if (ts - lastResizeTime < 1000)
+				if (ts - lastResizeTime < 200)
 				{
-					Thread.currentThread().sleep(1000);
+					Thread.currentThread().sleep(200);
 				}
 				switch (action.type)
 				{
@@ -282,7 +307,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
     private void addNewLine(String string)
 	{
 		text.appendLine(string);
-		if (freezed)
+		if (frozen||browsing)
 		{
 			return;
 		}
@@ -292,12 +317,12 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public void pageUp(int p0)
 	{
-
+		
     }
 
     public void pageDown(int p0)
 	{
-
+		
     }
 
 	public void refreshBuffer()
@@ -335,35 +360,30 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public boolean scrollLines(int p0) throws RejectedExecutionException
 	{
-//		long startTime=System.currentTimeMillis();
-//        if (buffer.size() < displaySize)
-//		{
-//			////System.err.println(buffer.size()+" "+displaySize);
-//			//  new RejectedExecutionException("cannot scrool when content size less than or equals with scroll range size.").printStackTrace();
-//            return false;
-//        }
-//        if (p0 < 0)
-//		{
-//            if ((contentStartIndex + p0) < 0)
-//			{
-//				// new RejectedExecutionException("contentStartIndex:" + contentStartIndex + " + " + p0 + " over scroll the top.").printStackTrace();
-//                return false;
-//            }
-//        }
-//		else
-//		{//
-//            if ((contentStartIndex + p0 + (displaySize)) > contents.size() + bufferSizeOverflow)
-//			{
-//				// new RejectedExecutionException("contentStartIndex:" + contentStartIndex + " + displaysize: "+displaySize+" + " + p0 + " over scroll the contents end: "+contents.size()+bufferSizeOverflow).printStackTrace();
-//                return false;
-//            }
-//        }
-//        contentStartIndex += p0;
-//		//refreshBuffer();
-//		// refreshFrame();
-//		long endTime=System.currentTimeMillis();
-//		//System.err.println("scrollLines took "+(endTime-startTime)+"ms");
-//        return true;
+		if(!browsing||frozen){
+			throw new IllegalStateException("terminal is not browsing or is frozen");
+		}
+		long startTime=System.currentTimeMillis();
+		buffer.clear();
+		List<String> lastLines=text.getLines(Math.max(0,text.getCurrentIndex()+p0),displaySize);
+		//currentContentEndPosition = 0;
+		for (int i=0;i < lastLines.size();i++)
+		{
+			String content=lastLines.get(i);
+			List<String> parseds =new StringContentParser(content, getTerminalSize().getColumns()).parse();
+			for (String parsed:parseds)
+			{
+				//System.err.println("parsed "+parsed);
+				buffer.add(parsed);
+				//textGraphics.putCSIStyledString(0, currentContentEndPosition, parsed);
+				//currentContentEndPosition++;
+			}
+		}
+		
+		//bufferSizeOverflow = bufferSize - contentSize;
+		long endTime=System.currentTimeMillis();
+		refreshFrame();
+		//System.err.println("refreshBuffer took "+(endTime-startTime)+"ms");
 		return true;
     }
 
@@ -378,7 +398,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
             //清空
 			////System.err.println("c: "+c);
             textGraphics.putCSIStyledString(0, c, a);
-
             if (contentIndex < buffer.size())
 			{
 				////System.err.println(buffer.get(locatedIndex));

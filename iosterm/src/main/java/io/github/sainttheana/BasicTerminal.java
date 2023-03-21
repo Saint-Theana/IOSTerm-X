@@ -67,7 +67,7 @@ public class BasicTerminal implements ThreadFactory
 	private boolean overrideStandardErr=false;
 	private boolean overrideStandardOut=false;
 	public TerminalPrintStream out;
-
+	private boolean browsing=false;
 	public void setOverrideStandardOut(boolean overrideStandardOut)
 	{
 		this.overrideStandardOut = overrideStandardOut;
@@ -137,6 +137,8 @@ public class BasicTerminal implements ThreadFactory
 	//private StringBuilder inputBuffer=new StringBuilder();
 
 	Runnable readThread=new Runnable(){
+
+		
 		@Override
 		public void run()
 		{
@@ -160,16 +162,16 @@ public class BasicTerminal implements ThreadFactory
 							case 'f':
 								screen.freeze();
 								break;
-							
-						
+							case 'b':
+								screen.browse();
+								browsing=!browsing;
+								break;
 						}
 						continue;
 					}
 					
 					switch (key.getKeyType())
 					{
-			
-							
 						case Character:
 							//inputBuffer.append(key.getCharacter());
 							inputer.append(key.getCharacter());
@@ -180,11 +182,10 @@ public class BasicTerminal implements ThreadFactory
 							inputer.delete();
 							break;
 						case ArrowUp:
-							if (isInScrollMode())
+							if (screen.isBrowsing())
 							{
 								screen.scrollLines(-1);
-								screen.refreshBuffer();
-								screen.refreshFrame();
+								
 							}
 							else
 							{
@@ -200,11 +201,9 @@ public class BasicTerminal implements ThreadFactory
 							}
 							break;
 						case ArrowDown:
-							if (isInScrollMode())
+							if (screen.isBrowsing())
 							{
 								screen.scrollLines(1);
-								screen.refreshBuffer();
-								screen.refreshFrame();
 							}
 							else
 							{
@@ -240,10 +239,14 @@ public class BasicTerminal implements ThreadFactory
 							inputer.goRight();
 							break;
 						case PageDown:
-							screen.pageDown(1);
+							if(browsing){
+							    screen.pageDown(1);
+							}
 							break;
 						case PageUp:
-							screen.pageUp(1);
+							if(browsing){
+							    screen.pageUp(1);
+							}
 							break;
 						case Tab:
 							break;
@@ -253,13 +256,13 @@ public class BasicTerminal implements ThreadFactory
 							inputer.clear();
 							break;
 						case Escape:
-							if (isInScrollMode())
+							if (screen.isFrozen())
 							{
-								leaveScrollMode();
+								screen.freeze();
 							}
-							else
+							else if(screen.isBrowsing())
 							{
-								enterScrollMode();
+								screen.browse();
 							}
 							break;
 						case Home:
@@ -455,20 +458,6 @@ public class BasicTerminal implements ThreadFactory
         new Thread(readThread, "read").start();
     }
 
-    private void enterScrollMode()
-	{
-        this.scrollMode = true;
-    }
-
-    private void leaveScrollMode()
-	{
-        this.scrollMode = false;
-    }
-
-    private boolean isInScrollMode()
-	{
-        return this.scrollMode;
-    }
 
 
 }
