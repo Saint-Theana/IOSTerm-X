@@ -146,7 +146,6 @@ public class BasicTerminal implements ThreadFactory
 				try
 				{
 					key = screen.readInput();
-				
 				}
 				catch (IOException e)
 				{
@@ -392,7 +391,7 @@ public class BasicTerminal implements ThreadFactory
 		{
 			saveHistory(new File(".history"));
 			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
-            System.out.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
+            System.out.print(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
 		}
 		inputStream.wrap(commandBuffer.getBytes());
     }
