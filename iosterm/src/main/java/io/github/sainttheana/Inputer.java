@@ -95,9 +95,9 @@ public class Inputer implements ThreadFactory
 
 	public void updateInput()
 	{
-		synchronized(this){
+		//synchronized(this){
 		    updateInputInternal();
-		}
+		//}
 	}
 
 	private void updateInputInternal()

@@ -10,7 +10,7 @@ public class Text
 	{
 		List<String> t=new ArrayList<String>();
 		int size=contents.size();
-		for(int i=0;i<count;i++){
+		for(int i=0;i<=count;i++){
 			if(size-1-i<0){
 				break;
 			}
