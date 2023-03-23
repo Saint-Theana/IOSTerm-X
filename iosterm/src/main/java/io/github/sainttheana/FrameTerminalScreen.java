@@ -103,11 +103,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			try
 			{
 				Action action=printQueue.take();
-				long ts=System.currentTimeMillis();
-				if (ts - lastResizeTime < 200)
-				{
-					Thread.currentThread().sleep(200);
-				}
+//				long ts=System.currentTimeMillis();
+//				if (ts - lastResizeTime < 500)
+//				{
+//					Thread.currentThread().sleep(500);
+//				}
 				switch (action.type)
 				{
 					case PrintLn:
@@ -234,11 +234,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public void putCSIStyledString(int column, int inputLine, String string) throws RejectedExecutionException
 	{
-        if (displayStartPosition < inputLine && inputLine < displayEndPosition)
-		{
-			return;
-            //throw new RejectedExecutionException("cannot putCSIStyledString inside scroll range.");
-        }
+//        if (displayStartPosition < inputLine && inputLine < displayEndPosition)
+//		{
+//			return;
+//            //throw new RejectedExecutionException("cannot putCSIStyledString inside scroll range.");
+//        }
         if (textGraphics != null)
 		{
             textGraphics.putCSIStyledString(column, inputLine, string);
@@ -248,8 +248,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	private void refreshInternal()
 	{
-		synchronized (this)
-		{
+//		synchronized (this)
+//		{
 			try
 			{
 				refresh();
@@ -259,7 +259,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 				e.printStackTrace();
 			}
-		}
+		//}
 	}
 
 	private String lineBuffer="";
@@ -390,9 +390,13 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		long startTime=System.currentTimeMillis();
         String a = generateEmptyString(getTerminalSize().getColumns());
 		int contentIndex=0;
-        for (int c = displayStartPosition; c < displayEndPosition; c += 1)
+		for (int c = displayStartPosition; c < displayEndPosition; c += 1)
 		{
             textGraphics.putCSIStyledString(0, c, a);
+        }
+        for (int c = displayStartPosition; c < displayEndPosition; c += 1)
+		{
+            
             if (contentIndex < buffer.size())
 			{
 				////System.err.println(buffer.get(locatedIndex));

@@ -14,7 +14,7 @@ public class TestMain
     public static void main(String[] args) throws Exception{
 		//inputReader=new MyInputReader();
 		terminal = new BasicTerminal();
-		terminal.setOverrideStandardErr(false);
+		terminal.setOverrideStandardErr(true);
 		terminal.setOverrideStandardOut(true);
 		terminal.setOverrideStandardIn(true);
 		terminal.process();
