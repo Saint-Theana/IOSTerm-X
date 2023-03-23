@@ -215,6 +215,14 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
         this.displayEndPosition = getTerminalSize().getRows() - 1;//结束位置在倒数第二行
 		displaySize = displayEndPosition - displayStartPosition;
 		resizing = false;
+		if(frozen){
+			scrollLines(0);
+		}else if(browsing){
+			scrollLines(0);
+		}else{
+			refreshBuffer();
+			refreshFrame();
+		}
 	}
 
 
@@ -332,7 +340,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			}
 		}
 		//最后一行是空的就把最后一行去掉
-		if(buffer.get(buffer.size()-1).isEmpty()){
+		if(buffer.size()>0&&buffer.get(buffer.size()-1).isEmpty()){
 			buffer.remove(buffer.size()-1);
 		}
 		//把开头超出的去掉确保最低下的能显示

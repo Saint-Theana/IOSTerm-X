@@ -52,16 +52,11 @@ public class BasicTerminal implements ThreadFactory
 
 	private TerminalInputStream inputStream;
 	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
-	private ThreadPoolExecutor executor=new ThreadPoolExecutor(10, 20, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(10), this, new ThreadPoolExecutor.AbortPolicy());
 	private FrameTerminalScreen screen;
     private int historyIndex = 0;
     private Inputer inputer;
     private LimitedList<String> history = new LimitedList<>(100);
-	// private boolean running = false;
-  //  private BasicTerminal.InputReader reader;
-	//private BasicTerminal.InputReader currentReader;
-    private boolean scrollMode;
-	private boolean inputVisibility=true;
+    private boolean inputVisibility=true;
 	private long lastResizeTime;
 	private boolean overrideStandardIn=false;
 	private boolean overrideStandardErr=false;
