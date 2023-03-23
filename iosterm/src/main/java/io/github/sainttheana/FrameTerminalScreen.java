@@ -331,6 +331,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 				//currentContentEndPosition++;
 			}
 		}
+		//最后一行是空的就把最后一行去掉
+		if(buffer.get(buffer.size()-1).isEmpty()){
+			buffer.remove(buffer.size()-1);
+		}
+		//把开头超出的去掉确保最低下的能显示
 		while (buffer.size() > displaySize)
 		{
 			buffer.remove(0);
