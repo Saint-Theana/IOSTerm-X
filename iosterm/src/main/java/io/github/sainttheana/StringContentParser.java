@@ -44,6 +44,11 @@ public class StringContentParser
 
 	public List<String> parse()
 	{
+		if(string.length()==0){
+			ArrayList<String> a= new ArrayList<String>();
+			a.add("");
+			return a;
+		}
 		//System.err.println(string);
 		char[] array=string.toCharArray();
 		for (int i=0;i < array.length;i++)

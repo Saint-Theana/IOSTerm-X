@@ -36,10 +36,12 @@ public class Text
 
 	public void setLast(String string)
 	{
+		//System.err.println("setLast "+string);
 		contents.set(contents.size() - 1, string);
 	}
 	
 	public void appendLine(String line){
+		//System.err.println("appendLine "+line);
 		contents.add(line);
 	}
 	
