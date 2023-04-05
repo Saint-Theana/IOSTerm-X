@@ -20,24 +20,19 @@
 package io.github.sainttheana;
 
 import com.googlecode.lanterna.TerminalPosition;
-
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TerminalTextUtils;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.Terminal;
+import com.googlecode.lanterna.terminal.TerminalResizeListener;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
-import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import com.googlecode.lanterna.terminal.TerminalResizeListener;
-import com.googlecode.lanterna.TerminalSize;
-import com.googlecode.lanterna.TerminalTextUtils;
-import java.util.ListIterator;
 
 public class FrameTerminalScreen extends TerminalScreen implements Runnable,ThreadFactory,TerminalResizeListener
 {
@@ -48,7 +43,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	private boolean frozen=false;
 
 	private boolean browsing =false;
-	
+
 	private String empty ="                                                                                                                                                                                                         ";
 
 	private char esc = 0x1b;
@@ -86,11 +81,12 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	{
 		return frozen;
 	}
-	
+
 	public void browse()
 	{
-		browsing= !browsing;
-		if(!browsing){
+		browsing = !browsing;
+		if (!browsing)
+		{
 			refreshBuffer();
 			refreshFrame();
 		}
@@ -99,28 +95,29 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	public void freeze()
 	{
 		frozen = !frozen;
-		if(!frozen){
+		if (!frozen)
+		{
 			refreshBuffer();
 			refreshFrame();
 		}
 	}
 
     @Override
-		public void onResized(Terminal p1, TerminalSize p2)
-		{
-			//System.err.println(p2);
-			doResizeIfNecessary();
-			onResize(p2);
-			
-		}
+	public void onResized(Terminal p1, TerminalSize p2)
+	{
+		//System.err.println(p2);
+		doResizeIfNecessary();
+		onResize(p2);
+
+	}
 
 	@Override
 	public Thread newThread(Runnable p1)
 	{
 		return new Thread(p1, "terminal" + p1.hashCode());
 	}
-	
-	
+
+
 //    private static final int maxFrame = 500;
 //    private LimitedList<String> contents = new LimitedList<>(maxFrame);//原始数
 	private List<String> buffer = new ArrayList<>();//缓存每一行分行的数据，用于显示
@@ -144,15 +141,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			try
 			{
 				Action action=printQueue.take();
-				if(action==null){
-				   // System.err.println("action is null.");
-				    continue;
-				}
-//				long ts=System.currentTimeMillis();
-//				if (ts - lastResizeTime < 500)
-//				{
-//					Thread.currentThread().sleep(500);
-//				}
 				switch (action.type)
 				{
 					case PrintLn:
@@ -173,7 +161,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			{
 				e.printStackTrace();
 			}
-			
+
 		}
 	}
 
@@ -203,36 +191,21 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	{
         super(term);
         text = new Text();
-		new Thread(this,"Virtual-Print-Thread").start();
-		
+		new Thread(this, "Virtual-Print-Thread").start();
+
 		//System.setOut();
     }
 
 	public void updateInput(String string)
 	{
-	  /*  putCSIStyledString(0, getTerminalSize().getRows() - 1, string);
-	    refreshFrame();
-	    */
-	   //printQueue.offer(new Action(ActionType.UptldateInput, string));
-	  // Thread.ofVirtual().name("Virtual-Action-Thread").start(new Runnable(){
+		/*  putCSIStyledString(0, getTerminalSize().getRows() - 1, string);
+		 refreshFrame();
+		 */
+		//printQueue.offer(new Action(ActionType.UptldateInput, string));
+		// Thread.ofVirtual().name("Virtual-Action-Thread").start(new Runnable(){
 		//        	@Override
-		 //       	public void run()
-		 //       	{
-		        	    try
-		        	   	{
-		        	   		printQueue.put(new Action(ActionType.UptldateInput, string));
-	        	   		}
-		        	   	catch (InterruptedException e)
-	        	   		{
-	        	   		    e.printStackTrace();
-	        	   		}
-		        	    
-		        	    
-		//        	}
-		    
-	//	    });
-	    /*
-	    
+		//       	public void run()
+		//       	{
 		try
 		{
 			printQueue.put(new Action(ActionType.UptldateInput, string));
@@ -241,29 +214,34 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
-		*/
-		
+
+
+		//        	}
+
+		//	    });
+	    /*
+
+		 try
+		 {
+		 printQueue.put(new Action(ActionType.UptldateInput, string));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
+
 	}
 
 	public void print(final String p0)
 	{
-	  /*  internalPrint(p0);
-	    refreshBuffer();
-		refreshFrame();
-		*/
+		/*  internalPrint(p0);
+		 refreshBuffer();
+		 refreshFrame();
+		 */
 	    //printQueue.offer(new Action(ActionType.Print, p0));
-	    
-		        	    try
-		        	   	{
-		        	   		printQueue.put(new Action(ActionType.Print, p0));
-	        	   		}
-		        	   	catch (InterruptedException e)
-	        	   		{
-	        	   		    e.printStackTrace();
-	        	   		}
-		        	    
-		        	
-	/*try
+
+		try
 		{
 			printQueue.put(new Action(ActionType.Print, p0));
 		}
@@ -271,29 +249,29 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
-		*/
+
+
+		/*try
+		 {
+		 printQueue.put(new Action(ActionType.Print, p0));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
 	}
 
 
 	public void println(final String p0)
 	{
 	    /*internalPrint(p0+ "\n");
-	    refreshBuffer();
-		refreshFrame();
-		*/
+		 refreshBuffer();
+		 refreshFrame();
+		 */
 	    //printQueue.offer(new Action(ActionType.PrintLn, p0));
-		
-		        	    try
-		        	   	{
-		        	   		printQueue.put(new Action(ActionType.PrintLn, p0));
-	        	   		}
-		        	   	catch (InterruptedException e)
-	        	   		{
-	        	   		    e.printStackTrace();
-	        	   		}
-		        	    
-		
-		/*try
+
+		try
 		{
 			printQueue.put(new Action(ActionType.PrintLn, p0));
 		}
@@ -301,19 +279,28 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
-		*/
+
+
+		/*try
+		 {
+		 printQueue.put(new Action(ActionType.PrintLn, p0));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
 	}
-	
-	
-	public void initSize(){
+
+
+	public void initSize()
+	{
 		//setScrollRange(0, getTerminalSize().getRows() - 2);
 		this.displayStartPosition = 0;//开始位置总在第一行
         this.displayEndPosition = getTerminalSize().getRows() - 1;//结束位置在倒数第二行
 		displaySize = displayEndPosition - displayStartPosition;
 		refreshBuffer();
 		refreshFrame();
-		
-	
 	}
 
 
@@ -334,22 +321,27 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		displaySize = displayEndPosition - displayStartPosition;
 		inputRow = p2.getRows() - 1;
 		sizeOfLine = p2.getColumns();
-		
+
 		resizing = false;
-		
-		if(frozen){
+
+		if (frozen)
+		{
 			scrollLines(0);
-		}else if(browsing){
+		}
+		else if (browsing)
+		{
 			scrollLines(0);
-		}else{
+		}
+		else
+		{
 			refreshBuffer();
 			refreshFrame();
 		}
-		
-		
-		
-		
-		setCursorPosition(new TerminalPosition(realCursorLength+ cursorDisplayStartIndex, inputRow));
+
+
+
+
+		setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
 	}
 
 
@@ -377,7 +369,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	{
 		//synchronized (this)
 		//{
-		if(System.currentTimeMillis()-lastResizeTime<200){
+		if (System.currentTimeMillis() - lastResizeTime < 200)
+		{
 		    new Thread(new Runnable(){
 		        	@Override
 		        	public void run()
@@ -391,22 +384,22 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	        	   		    e.printStackTrace();
 	        	   		}
 		        	    refreshInternal();
-		        	    
+
 		        	}
-		    
-		    },"Virtual-Print-Thread").start();
+
+				}, "Virtual-Print-Thread").start();
 	    	return;
 		}
-			try
-			{
-				refresh();
-			}
-			catch (Exception e)
-			{
+		try
+		{
+			refresh();
+		}
+		catch (Exception e)
+		{
 
-				e.printStackTrace();
-			}
-	//	}
+			e.printStackTrace();
+		}
+		//	}
 	}
 
 	private void internalPrint(String p0)
@@ -453,7 +446,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
     private void addNewLine(String string)
 	{
 		text.appendLine(string);
-		if (frozen||browsing)
+		if (frozen || browsing)
 		{
 			return;
 		}
@@ -461,20 +454,17 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public void pageUp(int p0)
 	{
-		
+
     }
 
     public void pageDown(int p0)
 	{
-		
+
     }
 
 	public void refreshBuffer()
 	{
-		if (refreshingFrame)
-		{
-			return;
-		}
+		
 		long startTime=System.currentTimeMillis();
 		buffer.clear();
 		List<String> lastLines=text.getLastLines(displaySize);
@@ -486,22 +476,23 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			List<String> parseds =new StringContentParser(content, getTerminalSize().getColumns()).parse();
 			for (String parsed:parseds)
 			{
-			//	System.err.println("parsed "+parsed);
+				//	System.err.println("parsed "+parsed);
 				buffer.add(parsed);
 				//textGraphics.putCSIStyledString(0, currentContentEndPosition, parsed);
 				//currentContentEndPosition++;
 			}
 		}
 		//最后一行是空的就把最后一行去掉
-		if(buffer.size()>0&&buffer.get(buffer.size()-1).isEmpty()){
-			buffer.remove(buffer.size()-1);
+		if (buffer.size() > 0 && buffer.get(buffer.size() - 1).isEmpty())
+		{
+			buffer.remove(buffer.size() - 1);
 		}
 		//把开头超出的去掉确保最低下的能显示
 		while (buffer.size() > displaySize)
 		{
 			buffer.remove(0);
 		}
-	//	System.err.println(buffer);
+		//	System.err.println(buffer);
 		//bufferSizeOverflow = bufferSize - contentSize;
 		long endTime=System.currentTimeMillis();
 		//System.err.println("refreshBuffer took "+(endTime-startTime)+"ms");
@@ -511,12 +502,13 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public boolean scrollLines(int p0) throws RejectedExecutionException
 	{
-		if(!browsing||frozen){
+		if (!browsing || frozen)
+		{
 			throw new IllegalStateException("terminal is not browsing or is frozen");
 		}
 		long startTime=System.currentTimeMillis();
 		buffer.clear();
-		List<String> lastLines=text.getLines(Math.max(0,text.getCurrentIndex()+p0),displaySize);
+		List<String> lastLines=text.getLines(Math.max(0, text.getCurrentIndex() + p0), displaySize);
 		//currentContentEndPosition = 0;
 		for (int i=0;i < lastLines.size();i++)
 		{
@@ -530,7 +522,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 				//currentContentEndPosition++;
 			}
 		}
-		
+
 		//bufferSizeOverflow = bufferSize - contentSize;
 		long endTime=System.currentTimeMillis();
 		refreshFrame();
@@ -540,17 +532,18 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     public void refreshFrame()
 	{
+		//new RuntimeException().printStackTrace();
 		refreshingFrame = true;
 		long startTime=System.currentTimeMillis();
         String a = generateEmptyString(getTerminalSize().getColumns());
 		int contentIndex=0;
-		for (int c = displayStartPosition; c < displayEndPosition+1; c += 1)
+		for (int c = displayStartPosition; c < displayEndPosition + 1; c += 1)
 		{
             textGraphics.putCSIStyledString(0, c, a);
         }
         for (int c = displayStartPosition; c < displayEndPosition; c += 1)
 		{
-            
+
             if (contentIndex < buffer.size())
 			{
 				////System.err.println(buffer.get(locatedIndex));
@@ -560,12 +553,16 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
         }
 		if (!inputVisibility)
 		{
-            textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText+displayInputLine.substring(StringUtil.getDisplaySizeOfANSIString(cursorText)).replaceAll(".","*"));
-		}else{
-			textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, displayInputLine);
+            textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText + displayInputLine.replaceAll(".", "*"));
+		}
+		else
+		{
+			textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText + displayInputLine);
 		}
 		long endTime=System.currentTimeMillis();
-		//System.err.println("refreshFrame took "+(endTime-startTime)+"ms");
+		//
+		
+	  //  System.err.println("refreshFrame took "+(endTime-startTime)+"ms");
 		refreshingFrame = false;
 		refreshInternal();
     }
@@ -582,9 +579,9 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		refreshFrame();
     }
 
-    
-	
-		
+
+
+
 
 	public void disableInputVisibility()
 	{
@@ -599,14 +596,14 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	public void updateInput()
 	{
 		//synchronized(this){
-		    updateInputInternal();
+		updateInputInternal();
 		//}
 	}
 
 	private void updateInputInternal()
 	{
 		String currentLine="";
-		String string= cursorText + getDisplay();
+		String string= getDisplay();
 		char[] array=string.toCharArray();
 		int currenLinetSize=0;
 		for (int i=0;i < array.length;i++)
@@ -644,8 +641,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 				//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
 				//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
 				updateCursorPosition();
-				
-				displayInputLine=currentLine;
+
+				displayInputLine = currentLine;
 				refreshFrame();
 				return;
 			}
@@ -653,7 +650,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			{
 				currentLine += character;
 				updateCursorPosition();
-				displayInputLine=currentLine;
+				displayInputLine = currentLine;
 				refreshFrame();
 				return;
 			}
@@ -665,11 +662,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			}
 		}
 		updateCursorPosition();
-	
-		displayInputLine=currentLine;
+
+		displayInputLine = currentLine;
 		refreshFrame();
-		
-		
+
+
 	}
 
 	private void updateCursorPosition()
@@ -686,7 +683,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		for (;a.hasNext();)
 		{
 			Character c=a.next();
-			if(c==null){
+			if (c == null)
+			{
 				continue;
 			}
 			if (offset == 0)
@@ -727,17 +725,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		return chars;
 	}
 
-	
-	
-	private void displayInputLine(String string)
-	{
-		
-		//System.err.println(inputRow+"  "+string);
-		updateInput(string);
 
-	}
-
-	
 
 	public String getCusorText()
 	{
@@ -746,7 +734,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	public void append(Character character)
 	{
-
 		charList.add(currentIndexOfInput, character);
 		currentIndexOfInput++;
 		int sizeOfCharacter=0;
@@ -899,12 +886,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		this.inputContentDisplayStartIndex = 0;
 		updateInput();
 	}
-
-
-
-
-
-
 
 
 	public String getInput()
