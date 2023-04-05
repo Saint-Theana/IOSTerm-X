@@ -264,7 +264,7 @@ public class BasicTerminal implements ThreadFactory
 							screen.gotoEnd();
 							break;
 					}
-					//screen.updateInput();
+					screen.updateInput();
 				}
 			}
 		}
