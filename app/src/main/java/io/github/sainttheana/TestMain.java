@@ -30,11 +30,10 @@ public class TestMain
 		terminal.enableInputVisibility();
 		System.out.println("读取到的密码是 "+password);
 		int i=0;
-		/*while(true){
-			Thread.currentThread().sleep(1000);
+		while(true){
 			System.out.println("\ngyftvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvhv"+i+++"\n");
 		}
-		*/
+		
     }
 	
 	

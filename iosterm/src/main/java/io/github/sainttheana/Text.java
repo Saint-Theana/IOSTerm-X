@@ -17,6 +17,14 @@ public class Text
 	{
 		return currentIndex;
 	}
+	
+	public String getLastLine()
+	{
+		if(contents.size()==0){
+		    return "";
+		}
+		return contents.get(contents.size()-1);
+	}
 
 	public List<String> getLastLines(int count)
 	{

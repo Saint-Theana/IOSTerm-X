@@ -19,19 +19,27 @@
  */
 package io.github.sainttheana;
 
+import com.googlecode.lanterna.TerminalPosition;
+
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.screen.TerminalScreen;
 import com.googlecode.lanterna.terminal.Terminal;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import com.googlecode.lanterna.terminal.TerminalResizeListener;
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TerminalTextUtils;
+import java.util.ListIterator;
 
-public class FrameTerminalScreen extends TerminalScreen implements Runnable,ThreadFactory
+public class FrameTerminalScreen extends TerminalScreen implements Runnable,ThreadFactory,TerminalResizeListener
 {
 	private long lastResizeTime;
 
@@ -40,6 +48,34 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	private boolean frozen=false;
 
 	private boolean browsing =false;
+	
+	private String empty ="                                                                                                                                                                                                         ";
+
+	private char esc = 0x1b;
+
+    private String cursorText = "root@computer " + esc + "[32;m~" + esc + "[0m# ";//每一行的开头
+
+    private int realCursorLength = StringUtil.getDisplaySizeOfANSIString(cursorText);
+
+	private int inputRow;//确定在第几行显示输入
+
+	private int sizeOfLine;//一行的宽度
+
+	private int inputStartIndex;//输入开始的位置，要减去cursorText的长度
+
+	private int inputContentDisplayStartIndex;//输入内容显示开始的位置，有可能不是开头
+
+	private int cursorDisplayStartIndex;
+
+	private volatile List<Character> charList =new ArrayList<Character>();
+
+	private int currentIndexOfInput;
+
+	private int currentCursorIndexOfTerminal;
+
+	private boolean inputVisibility=true;
+
+    private String displayInputLine="";
 
 	public boolean isBrowsing()
 	{
@@ -69,17 +105,22 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		}
 	}
 
+    @Override
+		public void onResized(Terminal p1, TerminalSize p2)
+		{
+			//System.err.println(p2);
+			doResizeIfNecessary();
+			onResize(p2);
+			
+		}
 
 	@Override
 	public Thread newThread(Runnable p1)
 	{
 		return new Thread(p1, "terminal" + p1.hashCode());
 	}
-
-	private ThreadPoolExecutor executor=new ThreadPoolExecutor(10, 30, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(1), this, new ThreadPoolExecutor.DiscardOldestPolicy());
-
-	private String empty ="                                                                                                                                                                                                         ";
-
+	
+	
 //    private static final int maxFrame = 500;
 //    private LimitedList<String> contents = new LimitedList<>(maxFrame);//原始数
 	private List<String> buffer = new ArrayList<>();//缓存每一行分行的数据，用于显示
@@ -103,6 +144,10 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			try
 			{
 				Action action=printQueue.take();
+				if(action==null){
+				   // System.err.println("action is null.");
+				    continue;
+				}
 //				long ts=System.currentTimeMillis();
 //				if (ts - lastResizeTime < 500)
 //				{
@@ -112,24 +157,27 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 				{
 					case PrintLn:
 						internalPrint(action.content + "\n");
+						refreshBuffer();
 						break;
 					case Print:
 						internalPrint(action.content);
+						refreshBuffer();
 						break;
 					case UptldateInput:
-						putCSIStyledString(0, getTerminalSize().getRows() - 1, action.content);
+						//putCSIStyledString(0, getTerminalSize().getRows() - 1, action.content);
 						break;
 				}
-				refreshInternal();
+				refreshFrame();
 			}
 			catch (InterruptedException e)
 			{
 				e.printStackTrace();
 			}
+			
 		}
 	}
 
-	private LinkedBlockingQueue<Action> printQueue=new LinkedBlockingQueue<Action>(100);
+	private LinkedBlockingQueue<Action> printQueue=new LinkedBlockingQueue<Action>(1000);
 
 	private class Action
 	{
@@ -154,13 +202,37 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
     public FrameTerminalScreen(Terminal term) throws IOException
 	{
         super(term);
-		new Thread(this, "print").start();
-		text = new Text();
+        text = new Text();
+		new Thread(this,"Virtual-Print-Thread").start();
+		
 		//System.setOut();
     }
 
 	public void updateInput(String string)
 	{
+	  /*  putCSIStyledString(0, getTerminalSize().getRows() - 1, string);
+	    refreshFrame();
+	    */
+	   //printQueue.offer(new Action(ActionType.UptldateInput, string));
+	  // Thread.ofVirtual().name("Virtual-Action-Thread").start(new Runnable(){
+		//        	@Override
+		 //       	public void run()
+		 //       	{
+		        	    try
+		        	   	{
+		        	   		printQueue.put(new Action(ActionType.UptldateInput, string));
+	        	   		}
+		        	   	catch (InterruptedException e)
+	        	   		{
+	        	   		    e.printStackTrace();
+	        	   		}
+		        	    
+		        	    
+		//        	}
+		    
+	//	    });
+	    /*
+	    
 		try
 		{
 			printQueue.put(new Action(ActionType.UptldateInput, string));
@@ -169,12 +241,29 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
+		*/
+		
 	}
 
 	public void print(final String p0)
 	{
-
-		try
+	  /*  internalPrint(p0);
+	    refreshBuffer();
+		refreshFrame();
+		*/
+	    //printQueue.offer(new Action(ActionType.Print, p0));
+	    
+		        	    try
+		        	   	{
+		        	   		printQueue.put(new Action(ActionType.Print, p0));
+	        	   		}
+		        	   	catch (InterruptedException e)
+	        	   		{
+	        	   		    e.printStackTrace();
+	        	   		}
+		        	    
+		        	
+	/*try
 		{
 			printQueue.put(new Action(ActionType.Print, p0));
 		}
@@ -182,12 +271,29 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
+		*/
 	}
 
 
 	public void println(final String p0)
 	{
-		try
+	    /*internalPrint(p0+ "\n");
+	    refreshBuffer();
+		refreshFrame();
+		*/
+	    //printQueue.offer(new Action(ActionType.PrintLn, p0));
+		
+		        	    try
+		        	   	{
+		        	   		printQueue.put(new Action(ActionType.PrintLn, p0));
+	        	   		}
+		        	   	catch (InterruptedException e)
+	        	   		{
+	        	   		    e.printStackTrace();
+	        	   		}
+		        	    
+		
+		/*try
 		{
 			printQueue.put(new Action(ActionType.PrintLn, p0));
 		}
@@ -195,11 +301,23 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			e.printStackTrace();
 		}
+		*/
+	}
+	
+	
+	public void initSize(){
+		//setScrollRange(0, getTerminalSize().getRows() - 2);
+		this.displayStartPosition = 0;//开始位置总在第一行
+        this.displayEndPosition = getTerminalSize().getRows() - 1;//结束位置在倒数第二行
+		displaySize = displayEndPosition - displayStartPosition;
+		refreshBuffer();
+		refreshFrame();
+		
+	
 	}
 
 
-
-	public void onResize()
+	public void onResize(TerminalSize p2)
 	{
 		lastResizeTime = System.currentTimeMillis();
 		//可能在短时间内有很多rezise调用，所以延迟执行
@@ -212,9 +330,13 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		}
 		//setScrollRange(0, getTerminalSize().getRows() - 2);
 		this.displayStartPosition = 0;//开始位置总在第一行
-        this.displayEndPosition = getTerminalSize().getRows() - 1;//结束位置在倒数第二行
+        this.displayEndPosition = p2.getRows() - 1;//结束位置在倒数第二行
 		displaySize = displayEndPosition - displayStartPosition;
+		inputRow = p2.getRows() - 1;
+		sizeOfLine = p2.getColumns();
+		
 		resizing = false;
+		
 		if(frozen){
 			scrollLines(0);
 		}else if(browsing){
@@ -223,6 +345,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			refreshBuffer();
 			refreshFrame();
 		}
+		
+		
+		
+		
+		setCursorPosition(new TerminalPosition(realCursorLength+ cursorDisplayStartIndex, inputRow));
 	}
 
 
@@ -248,8 +375,28 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	private void refreshInternal()
 	{
-//		synchronized (this)
-//		{
+		//synchronized (this)
+		//{
+		if(System.currentTimeMillis()-lastResizeTime<200){
+		    new Thread(new Runnable(){
+		        	@Override
+		        	public void run()
+		        	{
+		        	    try
+		        	   	{
+		        	   		Thread.sleep(200);
+	        	   		}
+		        	   	catch (Exception e)
+	        	   		{
+	        	   		    e.printStackTrace();
+	        	   		}
+		        	    refreshInternal();
+		        	    
+		        	}
+		    
+		    },"Virtual-Print-Thread").start();
+	    	return;
+		}
 			try
 			{
 				refresh();
@@ -259,13 +406,12 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 				e.printStackTrace();
 			}
-		//}
+	//	}
 	}
-
-	private String lineBuffer="";
 
 	private void internalPrint(String p0)
 	{
+	    String lastLine=text.getLastLine();
 		for (int a =0;a < p0.toCharArray().length;a++)
 		{
 			char t=p0.charAt(a);
@@ -273,19 +419,27 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			{
 				if (text.getSize() == 0)
 				{
-					addNewLine(lineBuffer);
+					addNewLine(lastLine);
 				}
 				else
 				{
-				    setLastLine(lineBuffer);
+				    setLastLine(lastLine);
 				}
 				addNewLine("");
-				lineBuffer = "";
+				lastLine = "";
 			}
 			else
 			{
-				lineBuffer += t;
+				lastLine += t;
 			}
+		}
+		if (text.getSize() == 0)
+		{
+			addNewLine(lastLine);
+		}
+		else
+		{
+			setLastLine(lastLine);
 		}
 	}
 
@@ -303,8 +457,6 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			return;
 		}
-		refreshBuffer();
-		refreshFrame();
     }
 
     public void pageUp(int p0)
@@ -326,6 +478,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		long startTime=System.currentTimeMillis();
 		buffer.clear();
 		List<String> lastLines=text.getLastLines(displaySize);
+		//System.err.println(lastLines);
 		//currentContentEndPosition = 0;
 		for (int i=0;i < lastLines.size();i++)
 		{
@@ -333,7 +486,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 			List<String> parseds =new StringContentParser(content, getTerminalSize().getColumns()).parse();
 			for (String parsed:parseds)
 			{
-				//System.err.println("parsed "+parsed);
+			//	System.err.println("parsed "+parsed);
 				buffer.add(parsed);
 				//textGraphics.putCSIStyledString(0, currentContentEndPosition, parsed);
 				//currentContentEndPosition++;
@@ -348,6 +501,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		{
 			buffer.remove(0);
 		}
+	//	System.err.println(buffer);
 		//bufferSizeOverflow = bufferSize - contentSize;
 		long endTime=System.currentTimeMillis();
 		//System.err.println("refreshBuffer took "+(endTime-startTime)+"ms");
@@ -390,7 +544,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 		long startTime=System.currentTimeMillis();
         String a = generateEmptyString(getTerminalSize().getColumns());
 		int contentIndex=0;
-		for (int c = displayStartPosition; c < displayEndPosition; c += 1)
+		for (int c = displayStartPosition; c < displayEndPosition+1; c += 1)
 		{
             textGraphics.putCSIStyledString(0, c, a);
         }
@@ -404,9 +558,16 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
             }
 			contentIndex++;
         }
+		if (!inputVisibility)
+		{
+            textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText+displayInputLine.substring(StringUtil.getDisplaySizeOfANSIString(cursorText)).replaceAll(".","*"));
+		}else{
+			textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, displayInputLine);
+		}
 		long endTime=System.currentTimeMillis();
 		//System.err.println("refreshFrame took "+(endTime-startTime)+"ms");
 		refreshingFrame = false;
+		refreshInternal();
     }
 
     @Override
@@ -414,8 +575,346 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	{
         textGraphics = newTextGraphics();
         super.startScreen();
-		onResize();
+		initSize();
+		inputRow = getTerminalSize().getRows() - 1;
+		this.sizeOfLine = getTerminalSize().getColumns();
+		setCursorPosition(new TerminalPosition(realCursorLength, inputRow));
+		refreshFrame();
     }
 
+    
+	
+		
+
+	public void disableInputVisibility()
+	{
+		inputVisibility = false;
+	}
+
+	public void enableInputVisibility()
+	{
+		inputVisibility = true;
+	}
+
+	public void updateInput()
+	{
+		//synchronized(this){
+		    updateInputInternal();
+		//}
+	}
+
+	private void updateInputInternal()
+	{
+		String currentLine="";
+		String string= cursorText + getDisplay();
+		char[] array=string.toCharArray();
+		int currenLinetSize=0;
+		for (int i=0;i < array.length;i++)
+		{
+			//System.err.println("i "+i);
+			char character=array[i];
+			int displaySizeOfCharacter=0;
+			//System.err.println(character);
+			if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
+			{
+				int length=TerminalTextUtils.getANSIControlSequenceLength(string, i);
+				//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
+				//System.err.println(length);
+				//currentLine+=character;
+				int end=i + length;
+				for (int i1=i;i1 < end;i1++)
+				{
+					//System.err.println("i1 " + i1);
+					displayInputLine += array[i1];
+				}
+				i += length - 1;
+				continue;
+			}
+			else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
+			{
+				displaySizeOfCharacter = 2;
+			}
+			else//一个字符宽度
+			{
+				displaySizeOfCharacter = 1;
+			}
+
+			if (currenLinetSize + displaySizeOfCharacter > sizeOfLine)
+			{
+				//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
+				//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
+				updateCursorPosition();
+				
+				displayInputLine=currentLine;
+				refreshFrame();
+				return;
+			}
+			if (currenLinetSize + displaySizeOfCharacter == sizeOfLine)
+			{
+				currentLine += character;
+				updateCursorPosition();
+				displayInputLine=currentLine;
+				refreshFrame();
+				return;
+			}
+			else
+			{
+				//还没到一行的宽度所以不写入
+				currentLine += character;
+				currenLinetSize += displaySizeOfCharacter;
+			}
+		}
+		updateCursorPosition();
+	
+		displayInputLine=currentLine;
+		refreshFrame();
+		
+		
+	}
+
+	private void updateCursorPosition()
+	{
+		setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
+	}
+
+
+	private String getDisplay()
+	{
+		StringBuilder sb=new StringBuilder();
+		int offset=inputContentDisplayStartIndex;
+		ListIterator<Character> a=clone(charList).listIterator();
+		for (;a.hasNext();)
+		{
+			Character c=a.next();
+			if(c==null){
+				continue;
+			}
+			if (offset == 0)
+			{
+				sb.append(c);
+			}
+			else if (offset == 1)
+			{
+				//说明只需要去掉这一个
+				//如果这个是中文那就替换成.
+				if (TerminalTextUtils.isCharCJK(c))
+				{
+					sb.append(".");
+				}
+				offset = 0;
+			}
+			else if (offset > 1)
+			{
+				//至少要去掉两个
+				if (TerminalTextUtils.isCharCJK(c))
+				{
+					offset -= 2;
+				}
+				else
+				{
+					offset -= 1;
+				}
+			}
+
+		}
+		return sb.toString();
+	}
+
+	private List<Character> clone(List<Character> charList)
+	{
+		List<Character> chars=new ArrayList<Character>();
+		chars.addAll(charList);
+		return chars;
+	}
+
+	
+	
+	private void displayInputLine(String string)
+	{
+		
+		//System.err.println(inputRow+"  "+string);
+		updateInput(string);
+
+	}
+
+	
+
+	public String getCusorText()
+	{
+		return cursorText;
+	}
+
+	public void append(Character character)
+	{
+
+		charList.add(currentIndexOfInput, character);
+		currentIndexOfInput++;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (cursorDisplayStartIndex + realCursorLength >= sizeOfLine)
+		{
+			//已经到了最右边了，把输入往左顶
+			inputContentDisplayStartIndex += sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex += sizeOfCharacter;
+		}
+		updateInput();
+	}
+
+	public void delete()
+	{
+		if (charList.isEmpty())
+		{
+			return;
+		}
+		Character character=charList.remove(currentIndexOfInput - 1);
+		currentIndexOfInput--;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (inputContentDisplayStartIndex > 0)
+		{
+			//不是在最左边，把输入往右顶
+			inputContentDisplayStartIndex -= sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex = Math.max(cursorDisplayStartIndex - sizeOfCharacter, 0);
+		}
+		updateInput();
+	}
+
+	public void goToStart()
+	{
+		this.currentCursorIndexOfTerminal = 0;
+		this.currentIndexOfInput = 0;
+		this.cursorDisplayStartIndex = 0;
+		this.inputContentDisplayStartIndex = 0;
+		updateInput();
+	}
+
+	public void goRight()
+	{
+		if (charList.size() == currentIndexOfInput)
+		{
+			return;
+		}
+		char character=charList.get(currentIndexOfInput);
+		currentIndexOfInput++;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (cursorDisplayStartIndex + realCursorLength >= sizeOfLine)
+		{
+
+			inputContentDisplayStartIndex += sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex += sizeOfCharacter;
+		}
+	}
+
+	public void goLeft()
+	{
+		if (currentIndexOfInput == 0)
+		{
+			return;
+		}
+		char character=charList.get(currentIndexOfInput - 1);
+		currentIndexOfInput--;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (inputContentDisplayStartIndex > 0)
+		{
+			inputContentDisplayStartIndex -= sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex -= sizeOfCharacter;
+		}
+
+	}
+
+	public void wrap(String string)
+	{
+		clear();
+		for (char c:string.toCharArray())
+		{
+			charList.add(c);
+		}
+		gotoEnd();
+	}
+
+	public void gotoEnd()
+	{
+		while (currentIndexOfInput != charList.size())
+		{
+			goRight();
+		}
+	}
+
+
+
+	public void setCursorText(String cursorText)
+	{
+		this.cursorText = cursorText;
+	}
+
+	public void clear()
+	{
+		//超出长度不会有问题
+		this.charList.clear();
+		this.currentCursorIndexOfTerminal = 0;
+		this.currentIndexOfInput = 0;
+		this.cursorDisplayStartIndex = 0;
+		this.inputContentDisplayStartIndex = 0;
+		updateInput();
+	}
+
+
+
+
+
+
+
+
+	public String getInput()
+	{
+		StringBuilder sb=new StringBuilder();
+		for (char c:charList)
+		{
+			sb.append(c);
+		}
+		return sb.toString();
+	}
 
 }

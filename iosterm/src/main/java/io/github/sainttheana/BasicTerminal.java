@@ -54,7 +54,7 @@ public class BasicTerminal implements ThreadFactory
 	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
 	private FrameTerminalScreen screen;
     private int historyIndex = 0;
-    private Inputer inputer;
+    
     private LimitedList<String> history = new LimitedList<>(100);
     private boolean inputVisibility=true;
 	private long lastResizeTime;
@@ -96,13 +96,13 @@ public class BasicTerminal implements ThreadFactory
 	public void disableInputVisibility()
 	{
 		inputVisibility = false;
-		inputer.disableInputVisibility();
+		screen.disableInputVisibility();
 	}
 
 	public void enableInputVisibility()
 	{
 		inputVisibility = true;
-		inputer.enableInputVisibility();
+		screen.enableInputVisibility();
 	}
 
 	Runnable resizeThread=new Runnable(){
@@ -114,11 +114,8 @@ public class BasicTerminal implements ThreadFactory
 				try
 				{
 					TerminalSize size=resizeQueue.take();
-					screen.onResize();
-					if (inputer != null)
-					{
-						inputer.onResize(size);
-					}
+					screen.onResize(size);
+					
 				}
 				catch (InterruptedException e)
 				{
@@ -169,12 +166,12 @@ public class BasicTerminal implements ThreadFactory
 					{
 						case Character:
 							//inputBuffer.append(key.getCharacter());
-							inputer.append(key.getCharacter());
+							screen.append(key.getCharacter());
 							break;
 						case Backspace:
 							// println("Backspace");
 							//inputBuffer.deleteCharAt(inputBuffer.length()-1);
-							inputer.delete();
+							screen.delete();
 							break;
 						case ArrowUp:
 							if (screen.isBrowsing())
@@ -185,13 +182,13 @@ public class BasicTerminal implements ThreadFactory
 							else
 							{
 								//inputBuffer.delete(0,inputBuffer.length()-1);
-								inputer.clear();
+								screen.clear();
 								historyIndex = Math.max(0, historyIndex - 1);
 								if (history.size() > 0)
 								{
 									//inputBuffer.append(history.get(historyIndex).getBytes());
-									inputer.wrap(history.get(historyIndex));
-									inputer.gotoEnd();
+									screen.wrap(history.get(historyIndex));
+									screen.gotoEnd();
 								}
 							}
 							break;
@@ -203,11 +200,11 @@ public class BasicTerminal implements ThreadFactory
 							else
 							{
 								//inputStream.clear();
-								inputer.clear();
+								screen.clear();
 								if (historyIndex + 1 == history.size())
 								{
-									inputer.wrap("");
-									inputer.gotoEnd();
+									screen.wrap("");
+									screen.gotoEnd();
 									historyIndex = history.size();
 									break;
 								}
@@ -220,18 +217,18 @@ public class BasicTerminal implements ThreadFactory
 								if (history.size() > 0)
 								{
 									//inputStream.wrap(history.get(historyIndex).getBytes());
-									inputer.wrap(history.get(historyIndex));
-									inputer.gotoEnd();
+									screen.wrap(history.get(historyIndex));
+									screen.gotoEnd();
 								}
 							}
 							break;
 						case ArrowLeft:
-							inputer.goLeft();
+							screen.goLeft();
 							break;
 						case ArrowRight:
 							// println(+terminalBuffer.length() + " " + inputStartIndex + " " +
 							// inputCursor + " " + screen.getTerminalSize().getColumns());
-							inputer.goRight();
+							screen.goRight();
 							break;
 						case PageDown:
 							if(browsing){
@@ -248,7 +245,7 @@ public class BasicTerminal implements ThreadFactory
 						case Enter:
 							//inputStream.write((byte)'\n');
 							executeCommand();
-							inputer.clear();
+							screen.clear();
 							break;
 						case Escape:
 							if (screen.isFrozen())
@@ -261,13 +258,13 @@ public class BasicTerminal implements ThreadFactory
 							}
 							break;
 						case Home:
-							inputer.goToStart();
+							screen.goToStart();
 							break;
 						case End:
-							inputer.gotoEnd();
+							screen.gotoEnd();
 							break;
 					}
-					inputer.updateInput();
+					screen.updateInput();
 				}
 			}
 		}
@@ -293,17 +290,21 @@ public class BasicTerminal implements ThreadFactory
         Terminal term = factory.createTerminal();
 		
         screen = new FrameTerminalScreen(term);
-		
+		//inputer = new Inputer(screen);
         this.adjustScreenSize(screen.getTerminalSize());
        // this.reader = reader;
 		//this.currentReader = reader;
         initHistory(new File(".history"));
-        term.addResizeListener(new MyTerminalResizeListener());
-		new Thread(resizeThread, "resize").start();
+        term.addResizeListener(screen);
+        //term.addResizeListener(inputer);
+		new Thread(resizeThread,"Virtual-Resize-Thread").start();
     }
 
     private void adjustScreenSize(final TerminalSize p2)
 	{
+	   // screen.onResize();
+	    
+	}/*
 		lastResizeTime = System.currentTimeMillis();
 		try
 		{
@@ -314,6 +315,7 @@ public class BasicTerminal implements ThreadFactory
 			e.printStackTrace();
 		}
     }
+    */
 
     public void initHistory(File file)
 	{
@@ -379,7 +381,7 @@ public class BasicTerminal implements ThreadFactory
 
     public void setCursorText(String cursorText)
 	{
-        inputer.setCursorText(cursorText);
+        screen.setCursorText(cursorText);
     }
 
     private void executeCommand(final String commandBuffer)
@@ -389,7 +391,7 @@ public class BasicTerminal implements ThreadFactory
 		{
 			saveHistory(new File(".history"));
 			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
-            System.out.print(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
+            System.out.print(StringEscapeUtils.unescapeEcmaScript(screen.getCusorText() + commandBuffer));
 		}
 		inputStream.wrap(commandBuffer.getBytes());
     }
@@ -410,7 +412,7 @@ public class BasicTerminal implements ThreadFactory
 
     private void executeCommand()
 	{
-        String command = inputer.getInput().trim();
+        String command = screen.getInput().trim();
         if (command.length() > 0)
 		{
             // println(command);
@@ -427,7 +429,7 @@ public class BasicTerminal implements ThreadFactory
         }
 		else
 		{
-            System.out.println(inputer.getCusorText());
+            System.out.println(screen.getCusorText());
         }
     }
 
@@ -448,9 +450,8 @@ public class BasicTerminal implements ThreadFactory
 		}
         screen.setTabBehaviour(TabBehaviour.CONVERT_TO_FOUR_SPACES);
         screen.startScreen();
-		inputer = new Inputer(screen);
-        inputer.updateInput();
-        new Thread(readThread, "read").start();
+        screen.updateInput();
+        new Thread(readThread,"Virtual-Read-Thread").start();
     }
 
 
