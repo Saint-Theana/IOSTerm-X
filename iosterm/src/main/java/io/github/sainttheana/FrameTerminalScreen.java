@@ -43,6 +43,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	private boolean frozen=false;
 
 	private boolean browsing =false;
+	
+	private int maxContentSize=2000;
 
 	private String empty ="                                                                                                                                                                                                         ";
 
@@ -72,6 +74,11 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
     private String displayInputLine="";
 
+	public void setMaxContentSize(int size)
+	{
+		maxContentSize=size;
+	}
+
 	public boolean isBrowsing()
 	{
 		return browsing;
@@ -85,21 +92,13 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	public void browse()
 	{
 		browsing = !browsing;
-		if (!browsing)
-		{
-			refreshBuffer();
-			refreshFrame();
-		}
+	
 	}
 
 	public void freeze()
 	{
 		frozen = !frozen;
-		if (!frozen)
-		{
-			refreshBuffer();
-			refreshFrame();
-		}
+	
 	}
 
     @Override
@@ -190,7 +189,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
     public FrameTerminalScreen(Terminal term) throws IOException
 	{
         super(term);
-        text = new Text();
+        text = new Text(maxContentSize);
 		new Thread(this, "Virtual-Print-Thread").start();
 
 		//System.setOut();
@@ -464,7 +463,10 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 
 	public void refreshBuffer()
 	{
-		
+		if (frozen || browsing)
+		{
+			return;
+		}
 		long startTime=System.currentTimeMillis();
 		buffer.clear();
 		List<String> lastLines=text.getLastLines(displaySize);
@@ -874,6 +876,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable,Thre
 	public void setCursorText(String cursorText)
 	{
 		this.cursorText = cursorText;
+		realCursorLength = StringUtil.getDisplaySizeOfANSIString(cursorText);
 	}
 
 	public void clear()

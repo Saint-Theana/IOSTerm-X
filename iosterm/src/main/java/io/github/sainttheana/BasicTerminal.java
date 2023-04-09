@@ -281,6 +281,10 @@ public class BasicTerminal implements ThreadFactory
 			screen.doResizeIfNecessary();
 		}
 	}
+	
+	public void setMaxContentSize(int size){
+	    screen.setMaxContentSize(size);
+	}
 
     public BasicTerminal(/*InputReader reader*/) throws Exception
 	{

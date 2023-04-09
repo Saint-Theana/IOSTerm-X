@@ -4,9 +4,14 @@ import java.util.ArrayList;
 
 public class Text
 {
+	
+	public Text(int maxContentSize){
+		contents =new LimitedList<String>(maxContentSize);
+	}
+	
 	private int currentIndex=0;
 	
-	private LimitedList<String> contents =new LimitedList<String>(2000);
+	private LimitedList<String> contents ;//=new LimitedList<String>();
 
 	public void setCurrentIndex(int currentIndex)
 	{
