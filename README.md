@@ -15,7 +15,7 @@ lallprojects {
 }
 	
 dependencies {
-	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.17'
+	implementation 'com.github.Saint-Theana:IOSTerm-X:1.0.25'
 }
 ```
 
@@ -59,9 +59,27 @@ terminal.out.println("hello world");
 
 ## 3: how to read input manually?
 ```java
+//method 1: use the Scanner.
 //notice:this does not behave like standard input,scanner will read all current input line even before you called new Scanner(System.in);
 Scanner s=new Scanner(System.in);
 System.out.println(s.nextLine());
+
+//method 2: use the InputDistributor
+//reading input in multi thread at the same time will be conflictive
+//if you indeed are doing so,InputDistributor.is recommended
+//start InputDistributor thread.
+new InputDistributor.start()
+//create an inputreader and register it.
+InputDistributor.registerHighPriority(new InputDistributor.InputReader(){
+    @Override public void read(String input){
+        
+    }
+});
+//InputDistributor will call only one InputReader with highest priority.
+//if you want an inputreader to always be called.
+//InputDistributor.registerAlways()
+//InputDistributor.unregister() to unregister readers.
+//it's basically still based on Scanner,but using Scanner in one thread will be safe.
 ```
 
 ## 4: how do I scroll the output?
