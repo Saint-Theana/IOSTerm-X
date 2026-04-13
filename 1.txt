@@ -1,0 +1,2731 @@
+package io.github.sainttheana;
+
+
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * 异步缓冲终端输出流，优化核心输出性能
+ * 优化点：8KB页缓冲、无锁异步队列、非阻塞写入、多线程安全无锁竞争
+ */
+public class AsyncTerminalOutputStream extends OutputStream {
+    private static final int BUFFER_SIZE = 8192; // 8KB 匹配操作系统页大小
+    private final byte[] buffer = new byte[BUFFER_SIZE];
+    private int position = 0;
+    private final ConcurrentLinkedQueue<String> writeQueue = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean running = new AtomicBoolean(true);
+    private final Thread consumerThread;
+    private final LineConsumer lineConsumer;
+
+    // 行消费回调，用于将数据提交给终端渲染
+    @FunctionalInterface
+    public interface LineConsumer {
+        void onWrite(String content);
+    }
+
+    public AsyncTerminalOutputStream(LineConsumer lineConsumer) {
+        this.lineConsumer = lineConsumer;
+        // 启动单消费线程，无锁竞争，批量处理
+        this.consumerThread = new Thread(new Runnable(){
+
+				@Override
+				public void run()
+				{
+					consumeLoop();
+					// TODO: Implement this method
+				}
+				
+			
+		},"terminal-output-consumer");
+        this.consumerThread.setDaemon(true);
+        this.consumerThread.start();
+    }
+
+    @Override
+    public void write(int b) {
+        if (!running.get()) return;
+        synchronized (buffer) {
+            buffer[position++] = (byte) b;
+            if (position >= BUFFER_SIZE) {
+                flushBuffer();
+            }
+        }
+    }
+
+    @Override
+    public void write(byte[] b, int off, int len) {
+        if (!running.get() || len <= 0) return;
+        synchronized (buffer) {
+            int remaining = BUFFER_SIZE - position;
+            if (len <= remaining) {
+                System.arraycopy(b, off, buffer, position, len);
+                position += len;
+            } else {
+                // 缓冲区满，先刷新，再处理剩余数据
+                flushBuffer();
+                if (len >= BUFFER_SIZE) {
+                    // 数据超过缓冲区大小，直接写入队列，避免多次复制
+                    writeQueue.add(new String(b, off, len, StandardCharsets.UTF_8));
+                } else {
+                    System.arraycopy(b, off, buffer, 0, len);
+                    position = len;
+                }
+            }
+        }
+    }
+
+    @Override
+    public void flush() {
+        synchronized (buffer) {
+            flushBuffer();
+        }
+    }
+
+    @Override
+    public void close() {
+        running.set(false);
+        flush();
+        consumerThread.interrupt();
+    }
+
+    /**
+     * 刷新缓冲区到队列，必须持有buffer锁
+     */
+    private void flushBuffer() {
+        if (position > 0) {
+            writeQueue.add(new String(buffer, 0, position, StandardCharsets.UTF_8));
+            position = 0;
+        }
+    }
+
+    /**
+     * 消费循环，单线程批量处理写入数据
+     */
+    private void consumeLoop() {
+        while (running.get() && !Thread.currentThread().isInterrupted()) {
+            StringBuilder batch = new StringBuilder();
+            String content;
+            // 批量拉取队列中所有数据，减少渲染调用次数
+            while ((content = writeQueue.poll()) != null) {
+                batch.append(content);
+            }
+            if (batch.length() > 0) {
+                lineConsumer.onWrite(batch.toString());
+            }
+            // 短暂休眠，合并高频小批量写入，降低渲染压力
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+}
+
+/*
+This library is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either
+version 2.1 of the License, or (at your option) any later version.
+
+This library is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with this library; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+USA
+
+Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+additional information or have any questions
+*/
+package io.github.sainttheana;
+
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.input.KeyStroke;
+import com.googlecode.lanterna.screen.TabBehaviour;
+import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+import com.googlecode.lanterna.terminal.Terminal;
+import com.googlecode.lanterna.terminal.TerminalResizeListener;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import org.apache.commons.text.StringEscapeUtils;
+import java.util.Queue;
+import com.googlecode.lanterna.terminal.ansi.UnixLikeTerminal;
+import com.googlecode.lanterna.input.KeyType;
+
+public class BasicTerminal implements ThreadFactory
+{
+
+	@Override
+	public Thread newThread(Runnable p1)
+	{
+		return new Thread(p1,"read");
+	}
+
+	private TerminalInputStream inputStream;
+	private LinkedBlockingQueue<TerminalSize> resizeQueue=new LinkedBlockingQueue<TerminalSize>(1);
+	private FrameTerminalScreen screen;
+    private int historyIndex = 0;
+    
+    private LimitedList<String> history = new LimitedList<>(100);
+    private boolean inputVisibility=true;
+	private long lastResizeTime;
+	private boolean overrideStandardIn=false;
+	private boolean overrideStandardErr=false;
+	private boolean overrideStandardOut=false;
+	public TerminalPrintStream out;
+	private boolean browsing=false;
+	public void setOverrideStandardOut(boolean overrideStandardOut)
+	{
+		this.overrideStandardOut = overrideStandardOut;
+	}
+
+	public boolean isOverrideStandardOut()
+	{
+		return overrideStandardOut;
+	}
+
+	public void setOverrideStandardErr(boolean overrideStandardErr)
+	{
+		this.overrideStandardErr = overrideStandardErr;
+	}
+
+	public boolean isOverrideStandardErr()
+	{
+		return overrideStandardErr;
+	}
+
+	public void setOverrideStandardIn(boolean overrideStandardIn)
+	{
+		this.overrideStandardIn = overrideStandardIn;
+	}
+
+	public boolean isOverrideStandardIn()
+	{
+		return overrideStandardIn;
+	}
+	
+	public void disableInputVisibility()
+	{
+		inputVisibility = false;
+		screen.disableInputVisibility();
+	}
+
+	public void enableInputVisibility()
+	{
+		inputVisibility = true;
+		screen.enableInputVisibility();
+	}
+
+	Runnable resizeThread=new Runnable(){
+		@Override
+		public void run()
+		{
+			while (true)
+			{
+				try
+				{
+					TerminalSize size=resizeQueue.take();
+					screen.onResize(size);
+					
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
+			}
+		}
+	};
+
+	
+	//private StringBuilder inputBuffer=new StringBuilder();
+
+	Runnable readThread=new Runnable(){
+
+		
+		@Override
+		public void run()
+		{
+			while (true)
+			{
+				KeyStroke key=null;
+				try
+				{
+					key = screen.readInput();
+				}
+				catch (IOException e)
+				{
+					e.printStackTrace();
+				}
+				if (key != null)
+				{
+					//System.err.println(key.getKeyType());
+					if(key.isCtrlDown()&&key.getKeyType()==KeyType.Character){
+						switch (key.getCharacter())
+						{
+							case 'f':
+								screen.freeze();
+								break;
+							case 'b':
+								screen.browse();
+								browsing=!browsing;
+								break;
+						}
+						continue;
+					}
+					
+					switch (key.getKeyType())
+					{
+						case Character:
+							//inputBuffer.append(key.getCharacter());
+							screen.append(key.getCharacter());
+							break;
+						case Backspace:
+							// println("Backspace");
+							//inputBuffer.deleteCharAt(inputBuffer.length()-1);
+							screen.delete();
+							break;
+						case ArrowUp:
+							if (screen.isBrowsing())
+							{
+								screen.scrollLines(-1);
+								
+							}
+							else
+							{
+								//inputBuffer.delete(0,inputBuffer.length()-1);
+								screen.clear();
+								historyIndex = Math.max(0, historyIndex - 1);
+								if (history.size() > 0)
+								{
+									//inputBuffer.append(history.get(historyIndex).getBytes());
+									screen.wrap(history.get(historyIndex));
+									screen.gotoEnd();
+								}
+							}
+							break;
+						case ArrowDown:
+							if (screen.isBrowsing())
+							{
+								screen.scrollLines(1);
+							}
+							else
+							{
+								//inputStream.clear();
+								screen.clear();
+								if (historyIndex + 1 == history.size())
+								{
+									screen.wrap("");
+									screen.gotoEnd();
+									historyIndex = history.size();
+									break;
+								}
+								else if (historyIndex + 1 > history.size())
+								{
+									break;
+								}
+								// println(history.size()+" "+historyIndex);
+								historyIndex = Math.max(0, Math.min(history.size() - 1, historyIndex + 1));
+								if (history.size() > 0)
+								{
+									//inputStream.wrap(history.get(historyIndex).getBytes());
+									screen.wrap(history.get(historyIndex));
+									screen.gotoEnd();
+								}
+							}
+							break;
+						case ArrowLeft:
+							screen.goLeft();
+							break;
+						case ArrowRight:
+							// println(+terminalBuffer.length() + " " + inputStartIndex + " " +
+							// inputCursor + " " + screen.getTerminalSize().getColumns());
+							screen.goRight();
+							break;
+						case PageDown:
+							if(browsing){
+							    screen.pageDown(1);
+							}
+							break;
+						case PageUp:
+							if(browsing){
+							    screen.pageUp(1);
+							}
+							break;
+						case Tab:
+							break;
+						case Enter:
+							//inputStream.write((byte)'\n');
+							executeCommand();
+							screen.clear();
+							break;
+						case Escape:
+							if (screen.isFrozen())
+							{
+								screen.freeze();
+							}
+							else if(screen.isBrowsing())
+							{
+								screen.browse();
+							}
+							break;
+						case Home:
+							screen.goToStart();
+							break;
+						case End:
+							screen.gotoEnd();
+							break;
+					}
+					screen.updateInput();
+				}
+			}
+		}
+	};
+
+	private class MyTerminalResizeListener implements TerminalResizeListener
+	{
+		@Override
+		public void onResized(Terminal p1, TerminalSize p2)
+		{
+			//System.err.println(p2);
+			
+			adjustScreenSize(p2);
+			screen.doResizeIfNecessary();
+		}
+	}
+	
+	public void setMaxContentSize(int size){
+	    screen.setMaxContentSize(size);
+	}
+
+    public BasicTerminal(/*InputReader reader*/) throws Exception
+	{
+        DefaultTerminalFactory factory =
+			new DefaultTerminalFactory(System.out, System.in, Charset.forName("UTF8"));
+		//factory.setUnixTerminalCtrlCBehaviour(UnixLikeTerminal.CtrlCBehaviour.TRAP);
+        Terminal term = factory.createTerminal();
+		
+        screen = new FrameTerminalScreen(term);
+		//inputer = new Inputer(screen);
+        this.adjustScreenSize(screen.getTerminalSize());
+       // this.reader = reader;
+		//this.currentReader = reader;
+        initHistory(new File(".history"));
+        term.addResizeListener(screen);
+        //term.addResizeListener(inputer);
+		new Thread(resizeThread,"Virtual-Resize-Thread").start();
+    }
+
+    private void adjustScreenSize(final TerminalSize p2)
+	{
+	   // screen.onResize();
+	    
+	}/*
+		lastResizeTime = System.currentTimeMillis();
+		try
+		{
+			resizeQueue.put(p2);
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+    }
+    */
+
+    public void initHistory(File file)
+	{
+        try
+		{
+			if(!file.exists()){
+				file.createNewFile();
+			}
+            InputStreamReader reader = new InputStreamReader(new FileInputStream(file));
+            BufferedReader br = new BufferedReader(reader);
+            String line = br.readLine();
+            while (line != null)
+			{
+                history.add(line);
+                line = br.readLine();
+            }
+            historyIndex = history.size();
+        }
+		catch (Exception e)
+		{
+            e.printStackTrace();
+        }
+    }
+
+    public void saveHistory(File file)
+	{
+        try
+		{
+            FileWriter fw = new FileWriter(file);
+            for (int i = 0; i < history.size(); i += 1)
+			{
+                fw.write(history.get(i) + "\n");
+            }
+            fw.flush();
+            fw.close();
+        }
+		catch (IOException e)
+		{
+            e.printStackTrace();
+        }
+    }
+
+    public int getColumn()
+	{
+        return screen.getTerminalSize().getColumns();
+    }
+
+	/*public void interceptReader(BasicTerminal.InputReader reader)
+	{
+        this.currentReader = reader;
+    }
+
+	public void releaseReader()
+	{
+        this.currentReader = this.reader;
+    }
+	*/
+
+//    public interface InputReader
+//	{
+//        void read(String input);
+//    }
+
+    public void setCursorText(String cursorText)
+	{
+        screen.setCursorText(cursorText);
+    }
+
+    private void executeCommand(final String commandBuffer)
+	{
+
+		if (inputVisibility)
+		{
+			saveHistory(new File(".history"));
+			//System.err.println(StringEscapeUtils.unescapeEcmaScript(inputer.getCusorText() + commandBuffer));
+            System.out.print(StringEscapeUtils.unescapeEcmaScript(screen.getCusorText() + commandBuffer));
+		}
+		inputStream.wrap(commandBuffer.getBytes());
+    }
+
+    public void destroy()
+	{
+        try
+		{
+            screen.stopScreen();
+            //running = false;
+        }
+		catch (IOException e)
+		{
+            e.printStackTrace();
+        }
+    }
+
+
+    private void executeCommand()
+	{
+        String command = screen.getInput().trim();
+        if (command.length() > 0)
+		{
+            // println(command);
+			if (inputVisibility)
+			{
+                history.add(command);
+			}
+			else
+			{
+				history.add(command.replaceAll(".", "*"));
+			}
+			executeCommand(command+"\n");
+            historyIndex = history.size();
+        }
+		else
+		{
+            screen.println(screen.getCusorText());
+        }
+    }
+
+	
+
+    public void process() throws IOException
+	{
+		out=new TerminalPrintStream(screen);
+		inputStream = new TerminalInputStream();
+		if(overrideStandardIn){
+			System.setIn(inputStream);
+		}
+		if(overrideStandardOut){
+		    System.setOut(out);
+		}
+		if(overrideStandardErr){
+		    System.setErr(out);
+		}
+        screen.setTabBehaviour(TabBehaviour.CONVERT_TO_FOUR_SPACES);
+        screen.startScreen();
+        screen.updateInput();
+        new Thread(readThread,"Virtual-Read-Thread").start();
+    }
+
+
+
+}
+
+package io.github.sainttheana;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * CJK字符宽度缓存，修复初始化顺序NPE，Java7全兼容
+ * 优化点：预生成静态映射表，LRU缓存生僻字，避免重复Unicode判断
+ */
+public class CJKWidthCache {
+    // ========== 核心修复：调整初始化顺序，先初始化数组，再初始化单例 ==========
+    private static final int CACHE_SIZE = 2048;
+    // 先初始化静态数组，确保单例构造时数组已非空
+    private static final int[] WIDTH_TABLE = new int[0x10000]; // 覆盖BMP全量字符
+    // 单例实例放在数组初始化之后，彻底解决NPE
+    public static final CJKWidthCache INSTANCE = new CJKWidthCache();
+
+    // LRU缓存生僻Unicode字符（超出BMP范围），Java7兼容泛型
+    private final Map<Integer, Integer> rareCharCache = new LinkedHashMap<Integer, Integer>(CACHE_SIZE, 0.75f, true) {
+        private static final long serialVersionUID = 1L;
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, Integer> eldest) {
+            return size() > CACHE_SIZE;
+        }
+    };
+
+    private CJKWidthCache() {
+        initWidthTable();
+    }
+
+    /**
+     * 预生成常用Unicode字符宽度表，补充空值校验，避免极端场景NPE
+     */
+    private void initWidthTable() {
+        // 双重校验，确保数组非空（极端类加载场景兜底）
+        if (WIDTH_TABLE == null || WIDTH_TABLE.length < 0x10000) {
+            throw new IllegalStateException("WIDTH_TABLE初始化失败");
+        }
+
+        // ASCII字符：宽度1
+        for (int i = 0x0000; i <= 0x007F; i++) {
+            WIDTH_TABLE[i] = 1;
+        }
+        // 全角ASCII、日文片假名、韩文谚文、CJK统一汉字：宽度2
+        for (int i = 0xFF01; i <= 0xFF5E; i++) WIDTH_TABLE[i] = 2; // 全角ASCII
+        for (int i = 0x3040; i <= 0x309F; i++) WIDTH_TABLE[i] = 2; // 日文平假名
+        for (int i = 0x30A0; i <= 0x30FF; i++) WIDTH_TABLE[i] = 2; // 日文片假名
+        for (int i = 0xAC00; i <= 0xD7AF; i++) WIDTH_TABLE[i] = 2; // 韩文谚文
+        for (int i = 0x4E00; i <= 0x9FFF; i++) WIDTH_TABLE[i] = 2; // CJK基本汉字
+        for (int i = 0x3400; i <= 0x4DBF; i++) WIDTH_TABLE[i] = 2; // CJK扩展A
+        // 中文标点、全角空格
+        WIDTH_TABLE[0x3000] = 2;
+        WIDTH_TABLE[0x3001] = 2;
+        WIDTH_TABLE[0x3002] = 2;
+        WIDTH_TABLE[0xFF1F] = 2;
+        WIDTH_TABLE[0xFF01] = 2;
+        WIDTH_TABLE[0xFF0C] = 2;
+        WIDTH_TABLE[0xFF1B] = 2;
+        WIDTH_TABLE[0xFF1A] = 2;
+    }
+
+    /**
+     * 获取字符的终端显示宽度，O(1)时间复杂度，补充空值校验
+     */
+    public int getCharWidth(int codePoint) {
+        // BMP内字符直接查表，补充数组边界校验
+        if (codePoint >= 0 && codePoint < WIDTH_TABLE.length) {
+            int width = WIDTH_TABLE[codePoint];
+            return width == 0 ? 1 : width; // 未初始化的字符默认宽度1
+        }
+        // 超出BMP的生僻字符，LRU缓存
+        return rareCharCache.containsKey(codePoint)
+			? rareCharCache.get(codePoint)
+			: calcCodePointWidth(codePoint);
+    }
+
+    /**
+     * 计算字符串的终端显示总宽度，空字符串兜底
+     */
+    public int getStringWidth(String str) {
+        if (str == null || str.isEmpty()) return 0;
+        int width = 0;
+        for (int i = 0; i < str.length(); ) {
+            int codePoint = str.codePointAt(i);
+            width += getCharWidth(codePoint);
+            i += Character.charCount(codePoint);
+        }
+        return width;
+    }
+
+    /**
+     * 原生计算Unicode字符宽度（仅生僻字符调用），Java7兼容
+     */
+    private int calcCodePointWidth(int codePoint) {
+        Character.UnicodeBlock block = Character.UnicodeBlock.of(codePoint);
+        if (block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B
+			|| block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_C
+			|| block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_D
+			|| block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS) {
+            int width = 2;
+            rareCharCache.put(codePoint, width);
+            return width;
+        }
+        int width = 1;
+        rareCharCache.put(codePoint, width);
+        return width;
+    }
+}
+
+package io.github.sainttheana;
+
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+
+/**
+ * 防抖工具，用于resize事件、频繁刷新场景优化
+ */
+public class Debouncer {
+    private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
+		new ThreadFactory() {
+			@Override
+			public Thread newThread(Runnable r) {
+				Thread t = new Thread(r, "terminal-debouncer");
+				t.setDaemon(true);
+				return t;
+			}
+		});
+    private final long delayMs;
+    private ScheduledFuture<?> future;
+
+    public Debouncer(long delayMs) {
+        this.delayMs = delayMs;
+    }
+
+    public synchronized void debounce(Runnable task) {
+        if (future != null && !future.isDone()) {
+            future.cancel(false);
+        }
+        future = scheduler.schedule(task, delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    public static void shutdown() {
+        scheduler.shutdown();
+    }
+}
+
+/*
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+ USA
+
+ Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+ additional information or have any questions
+ */
+package io.github.sainttheana;
+
+import com.googlecode.lanterna.TerminalPosition;
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TerminalTextUtils;
+import com.googlecode.lanterna.graphics.TextGraphics;
+import com.googlecode.lanterna.screen.TerminalScreen;
+import com.googlecode.lanterna.terminal.Terminal;
+import com.googlecode.lanterna.terminal.TerminalResizeListener;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+
+public class FrameTerminalScreen extends TerminalScreen implements Runnable,ThreadFactory,TerminalResizeListener
+{
+	private long lastResizeTime;
+
+	private boolean refreshingFrame;
+
+	private boolean frozen=false;
+
+	private boolean browsing =false;
+	
+	private int maxContentSize=2000;
+
+	private String empty ="                                                                                                                                                                                                         ";
+
+	private char esc = 0x1b;
+
+    private String cursorText = "root@computer " + esc + "[32;m~" + esc + "[0m# ";//每一行的开头
+
+    private int realCursorLength = StringUtil.getDisplaySizeOfANSIString(cursorText);
+
+	private int inputRow;//确定在第几行显示输入
+
+	private int sizeOfLine;//一行的宽度
+
+	private int inputStartIndex;//输入开始的位置，要减去cursorText的长度
+
+	private int inputContentDisplayStartIndex;//输入内容显示开始的位置，有可能不是开头
+
+	private int cursorDisplayStartIndex;
+
+	private volatile List<Character> charList =new ArrayList<Character>();
+
+	private int currentIndexOfInput;
+
+	private int currentCursorIndexOfTerminal;
+
+	private boolean inputVisibility=true;
+
+    private String displayInputLine="";
+
+	public void setMaxContentSize(int size)
+	{
+		maxContentSize=size;
+	}
+
+	public boolean isBrowsing()
+	{
+		return browsing;
+	}
+
+	public boolean isFrozen()
+	{
+		return frozen;
+	}
+
+	public void browse()
+	{
+		browsing = !browsing;
+	
+	}
+
+	public void freeze()
+	{
+		frozen = !frozen;
+	
+	}
+
+    @Override
+	public void onResized(Terminal p1, TerminalSize p2)
+	{
+		//System.err.println(p2);
+		doResizeIfNecessary();
+		onResize(p2);
+
+	}
+
+	@Override
+	public Thread newThread(Runnable p1)
+	{
+		return new Thread(p1, "terminal" + p1.hashCode());
+	}
+
+
+//    private static final int maxFrame = 500;
+//    private LimitedList<String> contents = new LimitedList<>(maxFrame);//原始数
+	private List<String> buffer = new ArrayList<>();//缓存每一行分行的数据，用于显示
+//    private int contentStartIndex = 0;//数据开始显示的位置
+    private int displayStartPosition = 0;//滚动区开始位置
+    private int displayEndPosition = 0;//滚动区结束位置
+    private int displaySize = 0;//活动区的总行数,也就是显示区的行数
+//    private int currentContentEndPosition = 0;//滚动区数据最后一行的位置
+//	private int bufferSizeOverflow =0;//当前的buffer可能由于超长字符串拆分为多行，从而造成比原始数据行数更多的情况
+    private TextGraphics textGraphics;
+	private Text text;
+	private boolean resizing;
+
+
+
+	@Override
+	public void run()
+	{
+		while (true)
+		{
+			try
+			{
+				Action action=printQueue.take();
+				switch (action.type)
+				{
+					case PrintLn:
+						internalPrint(action.content + "\n");
+						refreshBuffer();
+						break;
+					case Print:
+						internalPrint(action.content);
+						refreshBuffer();
+						break;
+					case UptldateInput:
+						//putCSIStyledString(0, getTerminalSize().getRows() - 1, action.content);
+						break;
+				}
+				refreshFrame();
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+
+		}
+	}
+
+	private LinkedBlockingQueue<Action> printQueue=new LinkedBlockingQueue<Action>(1000);
+
+	private class Action
+	{
+		public ActionType type;
+
+		public String content;
+
+		public Action(ActionType type, String content)
+		{
+			this.type = type;
+			this.content = content;
+		}
+	}
+
+	private enum ActionType
+	{
+		PrintLn,
+		Print,
+		UptldateInput;
+	}
+
+    public FrameTerminalScreen(Terminal term) throws IOException
+	{
+        super(term);
+        text = new Text(maxContentSize);
+		new Thread(this, "Virtual-Print-Thread").start();
+
+		//System.setOut();
+    }
+
+	public void updateInput(String string)
+	{
+		/*  putCSIStyledString(0, getTerminalSize().getRows() - 1, string);
+		 refreshFrame();
+		 */
+		//printQueue.offer(new Action(ActionType.UptldateInput, string));
+		// Thread.ofVirtual().name("Virtual-Action-Thread").start(new Runnable(){
+		//        	@Override
+		//       	public void run()
+		//       	{
+		try
+		{
+			printQueue.put(new Action(ActionType.UptldateInput, string));
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+
+
+		//        	}
+
+		//	    });
+	    /*
+
+		 try
+		 {
+		 printQueue.put(new Action(ActionType.UptldateInput, string));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
+
+	}
+
+	public void print(final String p0)
+	{
+		/*  internalPrint(p0);
+		 refreshBuffer();
+		 refreshFrame();
+		 */
+	    //printQueue.offer(new Action(ActionType.Print, p0));
+
+		try
+		{
+			printQueue.put(new Action(ActionType.Print, p0));
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+
+
+		/*try
+		 {
+		 printQueue.put(new Action(ActionType.Print, p0));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
+	}
+
+
+	public void println(final String p0)
+	{
+	    /*internalPrint(p0+ "\n");
+		 refreshBuffer();
+		 refreshFrame();
+		 */
+	    //printQueue.offer(new Action(ActionType.PrintLn, p0));
+
+		try
+		{
+			printQueue.put(new Action(ActionType.PrintLn, p0));
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+
+
+		/*try
+		 {
+		 printQueue.put(new Action(ActionType.PrintLn, p0));
+		 }
+		 catch (InterruptedException e)
+		 {
+		 e.printStackTrace();
+		 }
+		 */
+	}
+
+
+	public void initSize()
+	{
+		//setScrollRange(0, getTerminalSize().getRows() - 2);
+		this.displayStartPosition = 0;//开始位置总在第一行
+        this.displayEndPosition = getTerminalSize().getRows() - 1;//结束位置在倒数第二行
+		displaySize = displayEndPosition - displayStartPosition;
+		refreshBuffer();
+		refreshFrame();
+	}
+
+
+	public void onResize(TerminalSize p2)
+	{
+		lastResizeTime = System.currentTimeMillis();
+		//可能在短时间内有很多rezise调用，所以延迟执行
+		resizing = true;
+		//long startTime=System.currentTimeMillis();
+		//重新设置大小后不管他直接拉到最底下
+		if (this.textGraphics == null)
+		{
+			return;
+		}
+		//setScrollRange(0, getTerminalSize().getRows() - 2);
+		this.displayStartPosition = 0;//开始位置总在第一行
+        this.displayEndPosition = p2.getRows() - 1;//结束位置在倒数第二行
+		displaySize = displayEndPosition - displayStartPosition;
+		inputRow = p2.getRows() - 1;
+		sizeOfLine = p2.getColumns();
+
+		resizing = false;
+
+		if (frozen)
+		{
+			scrollLines(0);
+		}
+		else if (browsing)
+		{
+			scrollLines(0);
+		}
+		else
+		{
+			refreshBuffer();
+			refreshFrame();
+		}
+
+
+
+
+		setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
+	}
+
+
+    private String generateEmptyString(int columns)
+	{
+        return empty.substring(0, columns);
+    }
+
+
+    public void putCSIStyledString(int column, int inputLine, String string) throws RejectedExecutionException
+	{
+//        if (displayStartPosition < inputLine && inputLine < displayEndPosition)
+//		{
+//			return;
+//            //throw new RejectedExecutionException("cannot putCSIStyledString inside scroll range.");
+//        }
+        if (textGraphics != null)
+		{
+            textGraphics.putCSIStyledString(column, inputLine, string);
+        }
+		//refreshInternal();
+    }
+
+	private void refreshInternal()
+	{
+		//synchronized (this)
+		//{
+		if (System.currentTimeMillis() - lastResizeTime < 200)
+		{
+		    new Thread(new Runnable(){
+		        	@Override
+		        	public void run()
+		        	{
+		        	    try
+		        	   	{
+		        	   		Thread.sleep(200);
+	        	   		}
+		        	   	catch (Exception e)
+	        	   		{
+	        	   		    e.printStackTrace();
+	        	   		}
+		        	    refreshInternal();
+
+		        	}
+
+				}, "Virtual-Print-Thread").start();
+	    	return;
+		}
+		try
+		{
+			refresh();
+		}
+		catch (Exception e)
+		{
+
+			e.printStackTrace();
+		}
+		//	}
+	}
+
+	private void internalPrint(String p0)
+	{
+	    String lastLine=text.getLastLine();
+		for (int a =0;a < p0.toCharArray().length;a++)
+		{
+			char t=p0.charAt(a);
+			if (t == '\n')
+			{
+				if (text.getSize() == 0)
+				{
+					addNewLine(lastLine);
+				}
+				else
+				{
+				    setLastLine(lastLine);
+				}
+				addNewLine("");
+				lastLine = "";
+			}
+			else
+			{
+				lastLine += t;
+			}
+		}
+		if (text.getSize() == 0)
+		{
+			addNewLine(lastLine);
+		}
+		else
+		{
+			setLastLine(lastLine);
+		}
+	}
+
+
+	private void setLastLine(String string)
+	{
+		text.setLast(string);
+	}
+
+
+    private void addNewLine(String string)
+	{
+		text.appendLine(string);
+		if (frozen || browsing)
+		{
+			return;
+		}
+    }
+
+    public void pageUp(int p0)
+	{
+
+    }
+
+    public void pageDown(int p0)
+	{
+
+    }
+
+	public void refreshBuffer()
+	{
+		if (frozen || browsing)
+		{
+			return;
+		}
+		long startTime=System.currentTimeMillis();
+		buffer.clear();
+		List<String> lastLines=text.getLastLines(displaySize);
+		//System.err.println(lastLines);
+		//currentContentEndPosition = 0;
+		for (int i=0;i < lastLines.size();i++)
+		{
+			String content=lastLines.get(i);
+			List<String> parseds =new StringContentParser(content, getTerminalSize().getColumns()).parse();
+			for (String parsed:parseds)
+			{
+				//	System.err.println("parsed "+parsed);
+				buffer.add(parsed);
+				//textGraphics.putCSIStyledString(0, currentContentEndPosition, parsed);
+				//currentContentEndPosition++;
+			}
+		}
+		//最后一行是空的就把最后一行去掉
+		if (buffer.size() > 0 && buffer.get(buffer.size() - 1).isEmpty())
+		{
+			buffer.remove(buffer.size() - 1);
+		}
+		//把开头超出的去掉确保最低下的能显示
+		while (buffer.size() > displaySize)
+		{
+			buffer.remove(0);
+		}
+		//	System.err.println(buffer);
+		//bufferSizeOverflow = bufferSize - contentSize;
+		long endTime=System.currentTimeMillis();
+		//System.err.println("refreshBuffer took "+(endTime-startTime)+"ms");
+	}
+
+
+
+    public boolean scrollLines(int p0) throws RejectedExecutionException
+	{
+		if (!browsing || frozen)
+		{
+			throw new IllegalStateException("terminal is not browsing or is frozen");
+		}
+		long startTime=System.currentTimeMillis();
+		buffer.clear();
+		List<String> lastLines=text.getLines(Math.max(0, text.getCurrentIndex() + p0), displaySize);
+		//currentContentEndPosition = 0;
+		for (int i=0;i < lastLines.size();i++)
+		{
+			String content=lastLines.get(i);
+			List<String> parseds =new StringContentParser(content, getTerminalSize().getColumns()).parse();
+			for (String parsed:parseds)
+			{
+				//System.err.println("parsed "+parsed);
+				buffer.add(parsed);
+				//textGraphics.putCSIStyledString(0, currentContentEndPosition, parsed);
+				//currentContentEndPosition++;
+			}
+		}
+
+		//bufferSizeOverflow = bufferSize - contentSize;
+		long endTime=System.currentTimeMillis();
+		refreshFrame();
+		//System.err.println("refreshBuffer took "+(endTime-startTime)+"ms");
+		return true;
+    }
+
+    public void refreshFrame()
+	{
+		//new RuntimeException().printStackTrace();
+		refreshingFrame = true;
+		long startTime=System.currentTimeMillis();
+        String a = generateEmptyString(getTerminalSize().getColumns());
+		int contentIndex=0;
+		for (int c = displayStartPosition; c < displayEndPosition + 1; c += 1)
+		{
+            textGraphics.putCSIStyledString(0, c, a);
+        }
+        for (int c = displayStartPosition; c < displayEndPosition; c += 1)
+		{
+
+            if (contentIndex < buffer.size())
+			{
+				////System.err.println(buffer.get(locatedIndex));
+                textGraphics.putCSIStyledString(0, c, buffer.get(contentIndex));
+            }
+			contentIndex++;
+        }
+		if (!inputVisibility)
+		{
+            textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText + displayInputLine.replaceAll(".", "*"));
+		}
+		else
+		{
+			textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText + displayInputLine);
+		}
+		long endTime=System.currentTimeMillis();
+		//
+		
+	  //  System.err.println("refreshFrame took "+(endTime-startTime)+"ms");
+		refreshingFrame = false;
+		refreshInternal();
+    }
+
+    @Override
+    public void startScreen() throws IOException
+	{
+        textGraphics = newTextGraphics();
+        super.startScreen();
+		initSize();
+		inputRow = getTerminalSize().getRows() - 1;
+		this.sizeOfLine = getTerminalSize().getColumns();
+		setCursorPosition(new TerminalPosition(realCursorLength, inputRow));
+		refreshFrame();
+    }
+
+
+
+
+
+	public void disableInputVisibility()
+	{
+		inputVisibility = false;
+	}
+
+	public void enableInputVisibility()
+	{
+		inputVisibility = true;
+	}
+
+	public void updateInput()
+	{
+		//synchronized(this){
+		updateInputInternal();
+		//}
+	}
+
+	private void updateInputInternal()
+	{
+		String currentLine="";
+		String string= getDisplay();
+		char[] array=string.toCharArray();
+		int currenLinetSize=0;
+		for (int i=0;i < array.length;i++)
+		{
+			//System.err.println("i "+i);
+			char character=array[i];
+			int displaySizeOfCharacter=0;
+			//System.err.println(character);
+			if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
+			{
+				int length=TerminalTextUtils.getANSIControlSequenceLength(string, i);
+				//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
+				//System.err.println(length);
+				//currentLine+=character;
+				int end=i + length;
+				for (int i1=i;i1 < end;i1++)
+				{
+					//System.err.println("i1 " + i1);
+					displayInputLine += array[i1];
+				}
+				i += length - 1;
+				continue;
+			}
+			else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
+			{
+				displaySizeOfCharacter = 2;
+			}
+			else//一个字符宽度
+			{
+				displaySizeOfCharacter = 1;
+			}
+
+			if (currenLinetSize + displaySizeOfCharacter > sizeOfLine)
+			{
+				//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
+				//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
+				updateCursorPosition();
+
+				displayInputLine = currentLine;
+				refreshFrame();
+				return;
+			}
+			if (currenLinetSize + displaySizeOfCharacter == sizeOfLine)
+			{
+				currentLine += character;
+				updateCursorPosition();
+				displayInputLine = currentLine;
+				refreshFrame();
+				return;
+			}
+			else
+			{
+				//还没到一行的宽度所以不写入
+				currentLine += character;
+				currenLinetSize += displaySizeOfCharacter;
+			}
+		}
+		updateCursorPosition();
+
+		displayInputLine = currentLine;
+		refreshFrame();
+
+
+	}
+
+	private void updateCursorPosition()
+	{
+		setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
+	}
+
+
+	private String getDisplay()
+	{
+		StringBuilder sb=new StringBuilder();
+		int offset=inputContentDisplayStartIndex;
+		ListIterator<Character> a=clone(charList).listIterator();
+		for (;a.hasNext();)
+		{
+			Character c=a.next();
+			if (c == null)
+			{
+				continue;
+			}
+			if (offset == 0)
+			{
+				sb.append(c);
+			}
+			else if (offset == 1)
+			{
+				//说明只需要去掉这一个
+				//如果这个是中文那就替换成.
+				if (TerminalTextUtils.isCharCJK(c))
+				{
+					sb.append(".");
+				}
+				offset = 0;
+			}
+			else if (offset > 1)
+			{
+				//至少要去掉两个
+				if (TerminalTextUtils.isCharCJK(c))
+				{
+					offset -= 2;
+				}
+				else
+				{
+					offset -= 1;
+				}
+			}
+
+		}
+		return sb.toString();
+	}
+
+	private List<Character> clone(List<Character> charList)
+	{
+		List<Character> chars=new ArrayList<Character>();
+		chars.addAll(charList);
+		return chars;
+	}
+
+
+
+	public String getCusorText()
+	{
+		return cursorText;
+	}
+
+	public void append(Character character)
+	{
+		charList.add(currentIndexOfInput, character);
+		currentIndexOfInput++;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (cursorDisplayStartIndex + realCursorLength >= sizeOfLine)
+		{
+			//已经到了最右边了，把输入往左顶
+			inputContentDisplayStartIndex += sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex += sizeOfCharacter;
+		}
+		updateInput();
+	}
+
+	public void delete()
+	{
+		if (charList.isEmpty())
+		{
+			return;
+		}
+		Character character=charList.remove(currentIndexOfInput - 1);
+		currentIndexOfInput--;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (inputContentDisplayStartIndex > 0)
+		{
+			//不是在最左边，把输入往右顶
+			inputContentDisplayStartIndex -= sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex = Math.max(cursorDisplayStartIndex - sizeOfCharacter, 0);
+		}
+		updateInput();
+	}
+
+	public void goToStart()
+	{
+		this.currentCursorIndexOfTerminal = 0;
+		this.currentIndexOfInput = 0;
+		this.cursorDisplayStartIndex = 0;
+		this.inputContentDisplayStartIndex = 0;
+		updateInput();
+	}
+
+	public void goRight()
+	{
+		if (charList.size() == currentIndexOfInput)
+		{
+			return;
+		}
+		char character=charList.get(currentIndexOfInput);
+		currentIndexOfInput++;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (cursorDisplayStartIndex + realCursorLength >= sizeOfLine)
+		{
+
+			inputContentDisplayStartIndex += sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex += sizeOfCharacter;
+		}
+	}
+
+	public void goLeft()
+	{
+		if (currentIndexOfInput == 0)
+		{
+			return;
+		}
+		char character=charList.get(currentIndexOfInput - 1);
+		currentIndexOfInput--;
+		int sizeOfCharacter=0;
+		if (TerminalTextUtils.isCharCJK(character))
+		{
+			sizeOfCharacter += 2;
+		}
+		else
+		{
+			sizeOfCharacter++;
+		}
+		if (inputContentDisplayStartIndex > 0)
+		{
+			inputContentDisplayStartIndex -= sizeOfCharacter;
+		}
+		else
+		{
+			cursorDisplayStartIndex -= sizeOfCharacter;
+		}
+
+	}
+
+	public void wrap(String string)
+	{
+		clear();
+		for (char c:string.toCharArray())
+		{
+			charList.add(c);
+		}
+		gotoEnd();
+	}
+
+	public void gotoEnd()
+	{
+		while (currentIndexOfInput != charList.size())
+		{
+			goRight();
+		}
+	}
+
+
+
+	public void setCursorText(String cursorText)
+	{
+		this.cursorText = cursorText;
+		realCursorLength = StringUtil.getDisplaySizeOfANSIString(cursorText);
+	}
+
+	public void clear()
+	{
+		//超出长度不会有问题
+		this.charList.clear();
+		this.currentCursorIndexOfTerminal = 0;
+		this.currentIndexOfInput = 0;
+		this.cursorDisplayStartIndex = 0;
+		this.inputContentDisplayStartIndex = 0;
+		updateInput();
+	}
+
+
+	public String getInput()
+	{
+		StringBuilder sb=new StringBuilder();
+		for (char c:charList)
+		{
+			sb.append(c);
+		}
+		return sb.toString();
+	}
+
+}
+package io.github.sainttheana;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Scanner;
+
+public class InputDistributor extends Thread
+{
+	public static LinkedList<InputReader> readers=new LinkedList<InputReader>();
+
+	public static List<InputReader> permanentReaders=new ArrayList<InputReader>();
+	
+	public static void registerHighPriority(InputReader reader){
+		if(readers.contains(reader)){
+			return;
+		}
+		readers.addFirst(reader);
+	}
+
+	public static void registerLowPriority(InputReader reader){
+		if(readers.contains(reader)){
+			return;
+		}
+		readers.addLast(reader);
+	}
+	
+	public static void registerAlways(InputReader reader){
+		if(permanentReaders.contains(reader)){
+			return;
+		}
+		permanentReaders.add(reader);
+	}
+	
+
+	public static void unRegister(InputReader reader){
+		readers.remove(reader);
+		permanentReaders.remove(reader);
+	}
+
+	public interface InputReader{
+		void read(String string);
+	}
+
+	@Override
+	public void run()
+	{
+		Scanner scaner=new Scanner(System.in);
+		while(true){
+			String input =scaner.nextLine();
+			for(InputReader reader:permanentReaders){
+				reader.read(input);
+			}
+			if(readers.size()>0){
+			    readers.peekFirst().read(input);
+			}
+		}
+	}
+}
+package io.github.sainttheana;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class LimitedList<E> {
+    private List<E> delegate;
+    private int maxSize = 0;
+
+    public LimitedList(int maxSize) {
+        this.maxSize = maxSize;
+        delegate = new ArrayList<>(maxSize + 1);
+    }
+
+    public boolean add(E e) {
+        if (e == null || maxSize == 0) {
+            return true;
+        }
+        delegate.add(e);
+        if (delegate.size() > maxSize) {
+            delegate.remove(0);
+        }
+        return false;
+    }
+	
+	public E set(int index,E obj) {
+        return delegate.set(index,obj);
+    }
+
+    public E remove(int index) {
+        return delegate.remove(index);
+    }
+
+    public E get(int index) {
+            return delegate.get(index);
+    }
+
+    public int size() {
+        return delegate.size();
+    }
+	
+	public void clear(){
+		delegate.clear();
+	}
+}
+
+package io.github.sainttheana;
+
+
+import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TextCharacter;
+import com.googlecode.lanterna.graphics.TextGraphics;
+import com.googlecode.lanterna.screen.Screen;
+import com.googlecode.lanterna.screen.TerminalScreen;
+import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+import com.googlecode.lanterna.terminal.Terminal;
+
+import java.io.IOException;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import com.googlecode.lanterna.terminal.*;
+import java.util.function.*;
+import com.googlecode.lanterna.*;
+
+/**
+ * 优化后的终端渲染引擎，双缓冲+增量渲染
+ * 优化点：双缓冲避免闪烁、增量重绘仅更新变更区域、视口冻结优化、resize防抖
+ */
+public class OptimizedTerminalScreen {
+    private final Terminal terminal;
+    private final Screen screen;
+    private final TextGraphics textGraphics;
+    private final CJKWidthCache widthCache = CJKWidthCache.INSTANCE;
+    private final Debouncer resizeDebouncer = new Debouncer(200);
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+    // 终端状态
+    private int terminalWidth = 80;
+    private int terminalHeight = 24;
+    private int viewportOffset = 0; // 视口滚动偏移量
+    private boolean browseMode = false; // 浏览模式
+    private boolean freezeMode = false; // 冻结更新模式
+    private boolean needFullRedraw = false; // 全量重绘标记
+
+    // 历史行缓冲区，默认10000行容量，可配置
+    private final RingBuffer<String> lineBuffer;
+    private static final int DEFAULT_HISTORY_LINES = 10000;
+
+    public OptimizedTerminalScreen() throws IOException {
+        this(DEFAULT_HISTORY_LINES);
+    }
+
+    public OptimizedTerminalScreen(int historyLines) throws IOException {
+        this.terminal = new DefaultTerminalFactory().createTerminal();
+        this.screen = new TerminalScreen(terminal);
+        this.textGraphics = screen.newTextGraphics();
+        this.lineBuffer = new RingBuffer<>(historyLines);
+        screen.startScreen();
+        updateTerminalSize();
+        // 注册resize监听器
+        terminal.addResizeListener(new TerminalResizeListener(){
+
+				@Override
+				public void onResized(Terminal terminal, TerminalSize terminalSize)
+				{
+					resizeDebouncer.debounce(new Runnable(){
+
+							@Override
+							public void run()
+							{
+								updateTerminalSize();
+								// TODO: Implement this method
+							}
+							
+
+							
+						
+					});
+					// TODO: Implement this method
+				}
+			});
+    }
+
+    /**
+     * 写入内容到终端，自动换行处理
+     */
+    public void write(String content) {
+        if (freezeMode) return;
+        rwLock.writeLock().lock();
+        try {
+            // 按换行符拆分，处理自动换行
+            String[] lines = content.split("\\R", -1);
+            for (String line : lines) {
+                wrapAndAddLine(line);
+            }
+            // 非浏览模式自动滚动到底部
+            if (!browseMode) {
+                scrollToBottom();
+            }
+            // 触发渲染
+            render();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 自动换行处理，将超长行拆分为多行
+     */
+    private void wrapAndAddLine(String line) {
+        if (terminalWidth <= 0) {
+            lineBuffer.add(line);
+            return;
+        }
+        int currentWidth = 0;
+        StringBuilder currentLine = new StringBuilder();
+        for (int i = 0; i < line.length(); ) {
+            int codePoint = line.codePointAt(i);
+            int charWidth = widthCache.getCharWidth(codePoint);
+            // 超出宽度，换行
+            if (currentWidth + charWidth > terminalWidth) {
+                lineBuffer.add(currentLine.toString());
+                currentLine.setLength(0);
+                currentWidth = 0;
+            }
+            currentLine.appendCodePoint(codePoint);
+            currentWidth += charWidth;
+            i += Character.charCount(codePoint);
+        }
+        lineBuffer.add(currentLine.toString());
+    }
+
+    /**
+     * 核心渲染方法，增量重绘仅更新变更区域
+     */
+    /**
+	 * 核心渲染方法，修复fillRectangle参数错误，同时优化批量填充性能
+	 */
+	public void render() {
+		rwLock.readLock().lock();
+		try {
+			if (needFullRedraw) {
+				screen.clear();
+				needFullRedraw = false;
+			}
+			// 获取视口内需要渲染的行
+			int startLine = viewportOffset;
+			int endLine = Math.min(startLine + terminalHeight, lineBuffer.size());
+			String[] renderLines = lineBuffer.getRange(startLine, endLine);
+			// 逐行渲染
+			for (int i = 0; i < renderLines.length; i++) {
+				String line = renderLines[i];
+				if (line == null) line = "";
+				// 仅当行内容变化时重绘该行，增量渲染核心逻辑
+				if (!isLineUnchanged(i, line)) {
+					textGraphics.putString(0, i, line);
+				}
+			}
+			// ========== 修复核心错误：fillRectangle调用 ==========
+			// 一次性填充剩余所有空白行，无需循环逐行调用，性能更优
+			int blankStartRow = renderLines.length;
+			int blankRowCount = terminalHeight - blankStartRow;
+			if (blankRowCount > 0) {
+				textGraphics.fillRectangle(
+					// 左上角坐标：列0，行blankStartRow
+					new TerminalPosition(0, blankStartRow),
+					// 矩形尺寸：宽度terminalWidth列，高度blankRowCount行
+					new TerminalSize(terminalWidth, blankRowCount),
+					// 填充字符
+					TextCharacter.DEFAULT_CHARACTER
+				);
+			}
+			// 一次性刷新到终端，双缓冲核心逻辑不变
+			screen.refresh();
+		} catch (IOException e)
+		{
+			e.printStackTrace();
+		}finally {
+			rwLock.readLock().unlock();
+		}
+	}
+	
+
+    /**
+     * 判断行是否未变化，用于增量渲染判断
+     */
+    private boolean isLineUnchanged(int row, String line) {
+        for (int col = 0; col < terminalWidth; col++) {
+            TextCharacter oldChar = screen.getBackCharacter(col, row);
+            char newChar = col < line.length() ? line.charAt(col) : ' ';
+            if (oldChar.getCharacter() != newChar) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 更新终端尺寸，触发全量重绘
+     */
+    private void updateTerminalSize() {
+        rwLock.writeLock().lock();
+        try {
+            TerminalSize size = screen.doResizeIfNecessary();
+            if (size == null) size = screen.getTerminalSize();
+            this.terminalWidth = size.getColumns();
+            this.terminalHeight = size.getRows();
+            this.needFullRedraw = true;
+            scrollToBottom();
+            render();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    // 滚动控制方法
+    public void scrollUp(int lines) {
+        viewportOffset = Math.max(0, viewportOffset - lines);
+        needFullRedraw = true;
+        render();
+    }
+
+    public void scrollDown(int lines) {
+        viewportOffset = Math.min(lineBuffer.size() - terminalHeight, viewportOffset + lines);
+        needFullRedraw = true;
+        render();
+    }
+
+    public void scrollToTop() {
+        viewportOffset = 0;
+        needFullRedraw = true;
+        render();
+    }
+
+    public void scrollToBottom() {
+        viewportOffset = Math.max(0, lineBuffer.size() - terminalHeight);
+        needFullRedraw = true;
+        render();
+    }
+
+    // 模式切换
+    public void toggleBrowseMode() {
+        this.browseMode = !browseMode;
+        if (!browseMode) scrollToBottom();
+    }
+
+    public void toggleFreezeMode() {
+        this.freezeMode = !freezeMode;
+        if (!freezeMode) {
+            needFullRedraw = true;
+            render();
+        }
+    }
+
+    public boolean isBrowseMode() {
+        return browseMode;
+    }
+
+    public boolean isFreezeMode() {
+        return freezeMode;
+    }
+
+    // 生命周期管理
+    public void close() throws IOException {
+        screen.stopScreen();
+        terminal.close();
+        Debouncer.shutdown();
+    }
+
+    public Terminal getTerminal() {
+        return terminal;
+    }
+
+    public int getTerminalWidth() {
+        return terminalWidth;
+    }
+
+    public int getTerminalHeight() {
+        return terminalHeight;
+    }
+}
+
+package io.github.sainttheana;
+
+
+import java.util.Arrays;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+/**
+ * 固定容量环形缓冲区，线程安全，用于终端历史行存储
+ * 优化点：O(1)读写/滚动，自动淘汰旧数据，无数组复制开销
+ */
+public class RingBuffer<T> {
+    private final T[] buffer;
+    private int writeIndex = 0;
+    private int readIndex = 0;
+    private int size = 0;
+    private final int capacity;
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+    @SuppressWarnings("unchecked")
+    public RingBuffer(int capacity) {
+        this.capacity = capacity;
+        this.buffer = (T[]) new Object[capacity];
+    }
+
+    /**
+     * 写入数据，容量满时自动淘汰最旧数据
+     */
+    public void add(T item) {
+        rwLock.writeLock().lock();
+        try {
+            buffer[writeIndex] = item;
+            writeIndex = (writeIndex + 1) % capacity;
+            if (size < capacity) {
+                size++;
+            } else {
+                readIndex = (readIndex + 1) % capacity;
+            }
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 批量写入数据，优化批量输出性能
+     */
+    public void addAll(T[] items) {
+        rwLock.writeLock().lock();
+        try {
+            for (T item : items) {
+                add(item);
+            }
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 获取指定索引的数据（支持负索引，-1为最后一行）
+     */
+    public T get(int index) {
+        rwLock.readLock().lock();
+        try {
+            if (index < 0) index = size + index;
+            if (index < 0 || index >= size) return null;
+            int realIndex = (readIndex + index) % capacity;
+            return buffer[realIndex];
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * 获取指定范围的连续数据，用于视口渲染
+     */
+    public T[] getRange(int start, int end) {
+        rwLock.readLock().lock();
+        try {
+            start = Math.max(0, start);
+            end = Math.min(size, end);
+            int count = end - start;
+            if (count <= 0) return Arrays.copyOf(buffer, 0);
+
+            @SuppressWarnings("unchecked")
+				T[] result = (T[]) new Object[count];
+            for (int i = 0; i < count; i++) {
+                int realIndex = (readIndex + start + i) % capacity;
+                result[i] = buffer[realIndex];
+            }
+            return result;
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    public int size() {
+        rwLock.readLock().lock();
+        try {
+            return size;
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    public int capacity() {
+        return capacity;
+    }
+
+    /**
+     * 清空缓冲区
+     */
+    public void clear() {
+        rwLock.writeLock().lock();
+        try {
+            Arrays.fill(buffer, null);
+            writeIndex = 0;
+            readIndex = 0;
+            size = 0;
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+}
+
+/*
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+ USA
+
+ Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+ additional information or have any questions
+*/
+package io.github.sainttheana;
+
+import com.googlecode.lanterna.TerminalTextUtils;
+import java.util.ArrayList;
+import java.util.List;
+
+public class StringContentParser
+{
+	private String string;
+
+	private int lineSize;
+
+	private String currentLine="";
+
+	private int currenLinetSize;
+
+	private List<String> content=new ArrayList<String>();
+
+	//把一行字符串根据行宽拆成多行
+	public StringContentParser(String string, int lineSize)
+	{
+		this.string = string;
+		this.lineSize = lineSize;
+	}
+
+	public List<String> parse()
+	{
+		if(string.length()==0){
+			ArrayList<String> a= new ArrayList<String>();
+			a.add("");
+			return a;
+		}
+		//System.err.println(string);
+		char[] array=string.toCharArray();
+		for (int i=0;i < array.length;i++)
+		{
+			//System.err.println("i " + i);
+			char character=array[i];
+			int displaySizeOfCharacter=0;
+			//System.err.println(character);
+			boolean characterVisible=true;
+			if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
+			{
+				int length=TerminalTextUtils.getANSIControlSequenceLength(string, i);
+				//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
+				//System.err.println(length);
+				//currentLine+=character;
+				int end=i + length;
+				for (int i1=i;i1 < end;i1++)
+				{
+					//System.err.println("i1 " + i1);
+					currentLine += array[i1];
+				}
+				i += length - 1;
+				characterVisible = false;
+			}
+			else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
+			{
+				displaySizeOfCharacter = 2;
+			}
+			else//一个字符宽度
+			{
+				displaySizeOfCharacter = 1;
+			}
+			if (characterVisible)
+			{
+				if (currenLinetSize + displaySizeOfCharacter > lineSize)
+				{
+					//如果把当前的字符拼进去那么会超出长度，理论上当前的是占用两个宽度才会出现
+					//所以先把当前的字符串写入，然后当前字符当做下一个字符串的开头
+					content.add(currentLine);
+					currentLine = "" + character;
+					currenLinetSize = displaySizeOfCharacter;
+				}
+				else if (currenLinetSize + displaySizeOfCharacter == lineSize)
+				{
+					//刚刚好是一行所以直接写入
+					currentLine += character;
+					content.add(currentLine);
+					currentLine = "";
+					currenLinetSize = 0;
+				}
+				else
+				{
+					//还没到一行的宽度所以不写入
+					currentLine += character;
+					currenLinetSize += displaySizeOfCharacter;
+				}
+			}
+			if (i == array.length - 1)
+			{
+				//到末尾了，也就是最后一个
+				if (!currentLine.isEmpty())
+				{
+					content.add(currentLine);
+				}
+			}
+		}
+//		for(String g:content){
+//			System.err.println(g);
+//		}
+		return content;
+	}
+
+
+
+
+}
+/*
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+ USA
+
+ Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+ additional information or have any questions
+*/
+package io.github.sainttheana;
+
+import com.googlecode.lanterna.TerminalTextUtils;
+
+public class StringUtil
+{
+	
+
+
+	public static int getDisplaySizeOfANSIString(String string)
+	{
+		char[] array=string.toCharArray();
+		int totalSize=0;
+		for (int i=0;i < array.length;i++)
+		{
+			//System.err.println("i "+i);
+			char character=array[i];
+			int displaySizeOfCharacter=0;
+			//System.err.println(character);
+			if (character == 0x1b)//esc ansi控制字符，这玩意不显示在终端里
+			{
+				int length=TerminalTextUtils.getANSIControlSequenceLength(string,i);
+				//把这个字符拼进去然后还要把对应长度的控制字符写进去并且忽略长度
+				//System.err.println(length);
+				//currentLine+=character;
+				int end=i + length;
+				for(int i1=i;i1<end;i1++){
+					//System.err.println("i1 " + i1);
+					
+				}
+				i+=length-1;
+				continue;
+			}
+			else if (TerminalTextUtils.isCharCJK(character))//占用两个字符宽度
+			{
+				displaySizeOfCharacter = 2;
+			}
+			else//一个字符宽度
+			{
+				displaySizeOfCharacter = 1;
+			}
+			totalSize+=displaySizeOfCharacter;
+		}
+		return totalSize;
+	}
+}
+/*
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+ USA
+
+ Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+ additional information or have any questions
+ */
+package io.github.sainttheana;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ArrayBlockingQueue;
+
+public class TerminalInputStream extends InputStream
+{
+	public ArrayBlockingQueue<Byte> bytes=new ArrayBlockingQueue<>(2048);
+
+	@Override
+	public boolean markSupported()
+	{
+		return false;
+	}
+
+	
+	public void wrap(byte[] in)
+	{
+		bytes.clear();
+		for (byte b:in)
+		{
+			try
+			{
+				bytes.put(b);
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+		}
+	}
+
+	@Override
+	public int available() throws IOException
+	{
+		return bytes.size();
+	}
+
+	@Override
+	public int read(byte[] b) throws IOException
+	{
+		int length =available() > b.length ?b.length: available();
+		//at least read one;
+		length=length==0?1:length;
+		for (int i=0;i < length;i++)
+		{
+			try
+			{
+				b[i] = bytes.take();
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+		}
+		return length;
+	}
+
+	@Override
+	public int read(byte[] b, int off, int len) throws IOException
+	{
+		int length =available() > len ?len: available();
+		length=length==0?1:length;
+		//at least read one;
+		for (int i=0;i < length;i++)
+		{
+			try
+			{
+				b[off + i] = bytes.take();
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+		}
+		return length;
+	}
+
+
+	public void clear()
+	{
+		bytes.clear();
+	}
+
+
+	@Override
+	public int read() throws IOException
+	{
+		try
+		{
+			return bytes.take();
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+		return -1;
+	}
+
+}
+/*
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+ USA
+
+ Please contact Saint-Theana by email the.winter.will.come@gmail.com if you need
+ additional information or have any questions
+*/
+package io.github.sainttheana;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Locale;
+
+public class TerminalPrintStream extends PrintStream
+{
+
+	private FrameTerminalScreen screen;
+	
+	public TerminalPrintStream(FrameTerminalScreen screen)
+	{
+		super(System.out);
+		this.screen=screen;
+	}
+
+	@Override
+	public void write(byte[] b) throws IOException
+	{
+		screen.print(new String(b));
+	}
+
+	@Override
+	public void write(byte[] buf, int off, int len)
+	{
+		screen.print(new String(buf, off, len));
+	}
+	
+	
+	
+	
+	
+
+	@Override
+	public void print(Object obj)
+	{
+		screen.print(obj.toString());
+	}
+
+	@Override
+	public void print(char c)
+	{
+		screen.print(c+"");
+	}
+
+	@Override
+	public void print(double d)
+	{
+		screen.print(d+"");
+	}
+
+	@Override
+	public void print(boolean b)
+	{
+		screen.print(b+"");
+	}
+
+	@Override
+	public void print(String s)
+	{
+		screen.print(s+"");
+	}
+
+	@Override
+	public void println(Object x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println(int x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void print(float f)
+	{
+		screen.print(f+"");
+	}
+
+	@Override
+	public void print(int i)
+	{
+		screen.print(i+"");
+	}
+
+	@Override
+	public void println(String x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println(float x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println(boolean x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println(char x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println(long x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public PrintStream printf(Locale l, String format, Object[] args)
+	{
+		screen.print(String.format(l,format,args));
+		return this;
+		//return super.printf(l, format, args);
+	}
+//
+	@Override
+	public void print(long l)
+	{
+		screen.print(l+"");
+	}
+
+	@Override
+	public void println(double x)
+	{
+		screen.println(x+"");
+	}
+
+	@Override
+	public void println()
+	{
+		screen.println("");
+	}
+
+	@Override
+	public void println(char[] x)
+	{
+		screen.println(new String(x));
+	}
+
+	@Override
+	public void print(char[] s)
+	{
+		screen.print(new String(s));
+	}
+
+	@Override
+	public PrintStream printf(String format, Object[] args)
+	{
+		screen.print(String.format(format,args));
+		return this;
+	}
+
+
+
+
+};
+package io.github.sainttheana;
+import java.util.List;
+import java.util.ArrayList;
+
+public class Text
+{
+	
+	public Text(int maxContentSize){
+		contents =new LimitedList<String>(maxContentSize);
+	}
+	
+	private int currentIndex=0;
+	
+	private LimitedList<String> contents ;//=new LimitedList<String>();
+
+	public void setCurrentIndex(int currentIndex)
+	{
+		this.currentIndex = currentIndex;
+	}
+
+	public int getCurrentIndex()
+	{
+		return currentIndex;
+	}
+	
+	public String getLastLine()
+	{
+		if(contents.size()==0){
+		    return "";
+		}
+		return contents.get(contents.size()-1);
+	}
+
+	public List<String> getLastLines(int count)
+	{
+		List<String> t=new ArrayList<String>();
+		int size=contents.size();
+		int firstLine=0;
+		for(int i=0;i<=count;i++){
+			if(size-1-i<0){
+				break;
+			}
+			t.add(0,contents.get(size-1-i));
+			firstLine=size-1-i;
+		}
+		currentIndex=firstLine;
+		return t;
+	}
+
+	public void setLast(String string)
+	{
+		//System.err.println("setLast "+string);
+		contents.set(contents.size() - 1, string);
+	}
+	
+	public void appendLine(String line){
+		//System.err.println("appendLine "+line);
+		contents.add(line);
+	}
+	
+	public List<String> getLines(int start,int count){
+		if(start>=contents.size()){
+			//throw new IllegalStateException("start > contents size");
+			start=contents.size()-1;
+		}
+		List<String> t=new ArrayList<String>();
+		for(int i=0;i<count;i++){
+			if(start+i>=contents.size()){
+				break;
+			}
+			t.add(contents.get(start+i));
+		}
+		currentIndex=start;
+		return t;
+	}
+	
+	
+	public int getSize(){
+		return contents.size();
+	}
+}
