@@ -33,7 +33,7 @@ public class InputDistributor extends Thread
 	}
 	
 
-	public static void unRegister(InputReader reader){
+	public static void unregister(InputReader reader){
 		readers.remove(reader);
 		permanentReaders.remove(reader);
 	}

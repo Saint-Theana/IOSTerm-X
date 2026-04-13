@@ -10,11 +10,13 @@ public class TestMain
 
 
 
-
+	private static char esc = 0x1b;
+	
     public static void main(String[] args) throws Exception{
 		//inputReader=new MyInputReader();
 		terminal = new BasicTerminal();
-		terminal.setCursorText("wello term: ");
+		
+		terminal.setCursorText("root@computer " + esc + "[32;m~" + esc + "[0m# ");
 		terminal.setMaxContentSize(5000);
 		terminal.setOverrideStandardErr(true);
 		terminal.setOverrideStandardOut(true);
@@ -31,23 +33,21 @@ public class TestMain
 					System.out.println("读取到的帐号是 "+string);
 					System.out.println("输入密码");
 					terminal.disableInputVisibility();
-					InputDistributor.unRegister(this);
+					InputDistributor.unregister(this);
 					InputDistributor.registerHighPriority(new InputDistributor.InputReader(){
 							@Override
 							public void read(String string)
 							{
 								terminal.enableInputVisibility();
 								System.out.println("读取到的密码是 "+string);
+								InputDistributor.unregister(this);
 							}
 						});
 				}
 		});
 		
 		int i=0;
-		while(true){
-			Thread.currentThread().sleep(500);
-			System.out.println("\ngyftvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvgyftvhvhv"+i+++"\n");
-		}
+		
 		
     }
 	
