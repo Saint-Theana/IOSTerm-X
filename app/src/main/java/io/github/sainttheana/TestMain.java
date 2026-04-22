@@ -46,8 +46,28 @@ public class TestMain
 				}
 		});
 		
-		int i=0;
-		
+		/*new Thread(new Runnable(){
+
+				@Override
+				public void run()
+				{
+					int i=0;
+					while (true){
+						try
+						{
+							//Thread.currentThread().sleep(1);
+							System.out.println(i++);
+						}
+						catch (Exception e)
+						{
+							e.printStackTrace();
+						}
+					}
+					// TODO: Implement this method
+				}
+				
+			
+		}).start();*/
 		
     }
 	

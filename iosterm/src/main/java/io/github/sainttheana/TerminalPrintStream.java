@@ -44,11 +44,6 @@ public class TerminalPrintStream extends PrintStream
 	{
 		screen.print(new String(buf, off, len));
 	}
-	
-	
-	
-	
-	
 
 	@Override
 	public void print(Object obj)

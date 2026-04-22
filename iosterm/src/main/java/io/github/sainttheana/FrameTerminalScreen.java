@@ -51,7 +51,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
     private int realCursorLength = StringUtil.getDisplaySizeOfANSIString(cursorText);
     private int inputRow;
     private int sizeOfLine;
-    private int inputStartIndex;
+ //   private int inputStartIndex;
     private int inputContentDisplayStartIndex;
     private int cursorDisplayStartIndex;
     private final Object charListLock = new Object();
@@ -71,12 +71,67 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
     private boolean resizing;
     private ScheduledExecutorService delayedRefreshExecutor;
 
-    @Override
-    public void onResized(Terminal p1, TerminalSize p2)
-    {
-        doResizeIfNecessary();
-        onResize(p2);
-    }
+    private final Object refreshLock = new Object();
+
+	@Override
+	public void onResized(Terminal p1, TerminalSize p2) {
+		synchronized (refreshLock) {
+			doResizeIfNecessary();
+			onResize(p2);
+		}
+	}
+
+	private void refreshInternal(final RefreshType type) {
+		if (System.currentTimeMillis() - lastResizeTime < 10) {
+			delayedRefreshExecutor.schedule(new Runnable(){
+
+					@Override
+					public void run()
+					{
+						refreshInternal(type);
+						// TODO: Implement this method
+					}
+					
+				
+			}
+			, 10, TimeUnit.MILLISECONDS);
+			return;
+		}
+		synchronized (refreshLock) {
+			try {
+				refresh(type);
+			} catch (NullPointerException e) {
+				// 缓冲区可能损坏，尝试修复并重试一次
+				fixBufferState();
+				try {
+					refresh(type);
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private void fixBufferState() {
+		try {
+			TerminalSize size = getTerminalSize();
+			TextGraphics tg = newTextGraphics();
+			String emptyLine = generateEmptyString(size.getColumns());
+			for (int row = 0; row < size.getRows(); row++) {
+				tg.putString(0, row, emptyLine);
+			}
+			// 重新绘制缓存内容
+			// ... 可以将 cachedBufferLines 再次写入 ...
+			// 标记为脏，下一次 refreshFrame 会完整重绘
+			bufferDirty = true;
+		} catch (Exception e) {
+			// 忽略
+		}
+	}
+
+	
 
     @Override
     public Thread newThread(Runnable p1)
@@ -232,13 +287,15 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
             refreshBuffer();
             refreshFrame(RefreshType.COMPLETE);
         }
-        setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
+		updateCursorPosition();
+		//
+      //  setCursorPosition(new TerminalPosition(realCursorLength + cursorDisplayStartIndex, inputRow));
     }
 
-    private String generateEmptyString(int columns)
-    {
-        return empty.substring(0, columns);
-    }
+    private String generateEmptyString(int columns) {
+		// 直接生成所需长度的空格字符串
+		return String.format("%" + columns + "s", "");
+	}
 
     public void putCSIStyledString(int column, int inputLine, String string) throws RejectedExecutionException
     {
@@ -248,27 +305,7 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
         }
     }
 
-    private void refreshInternal(final RefreshType type)
-    {
-        if (System.currentTimeMillis() - lastResizeTime < 200)
-        {
-            // 使用单线程调度器延迟刷新，避免线程爆炸
-            delayedRefreshExecutor.schedule(new Runnable() {
-					public void run() {
-						refreshInternal(type);
-					}
-				}, 200, TimeUnit.MILLISECONDS);
-            return;
-        }
-        try
-        {
-            refresh(type);
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-    }
+    
 
     private void internalPrint(String p0)
     {
@@ -405,6 +442,10 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
 
     public void refreshFrame(RefreshType type)
     {
+		synchronized (refreshLock) {
+			refreshingFrame = true;
+			// ... 原有的清屏与绘制逻辑 ...
+			
         refreshingFrame = true;
         //long startTime = System.currentTimeMillis();
         String emptyLine = generateEmptyString(getTerminalSize().getColumns());
@@ -433,8 +474,9 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
                 textGraphics.putCSIStyledString(0, getTerminalSize().getRows() - 1, cursorText + displayInputLine);
             }
         }
-        refreshingFrame = false;
-        refreshInternal(type);
+			refreshingFrame = false;
+			refreshInternal(type);
+		}
     }
 
     @Override
@@ -445,7 +487,8 @@ public class FrameTerminalScreen extends TerminalScreen implements Runnable, Thr
         initSize();
         inputRow = getTerminalSize().getRows() - 1;
         this.sizeOfLine = getTerminalSize().getColumns()-1;
-        setCursorPosition(new TerminalPosition(realCursorLength, inputRow));
+        //  setCursorPosition(new TerminalPosition(realCursorLength, inputRow));
+		updateCursorPosition();
         refreshFrame(RefreshType.AUTOMATIC);
     }
 
