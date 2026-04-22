@@ -57,7 +57,7 @@ public class BasicTerminal implements ThreadFactory
 
     private LimitedList<String> history = new LimitedList<>(100);
     private boolean inputVisibility=true;
-    private long lastResizeTime;
+ //   private long lastResizeTime;
     private boolean overrideStandardIn=false;
     private boolean overrideStandardErr=false;
     private boolean overrideStandardOut=false;
@@ -411,8 +411,8 @@ public class BasicTerminal implements ThreadFactory
     private void executeCommand()
     {
         String command = screen.getInput().trim();
-        if (command.length() > 0)
-        {
+      //  if (command.length() > 0)
+      //  {
             if (inputVisibility)
             {
                 history.add(command);
@@ -423,11 +423,11 @@ public class BasicTerminal implements ThreadFactory
             }
             executeCommand(command+"\n");
             historyIndex = history.size();
-        }
-        else
-        {
-            screen.println(screen.getCusorText());
-        }
+     //   }
+       // else
+     //   {
+        //    screen.println(screen.getCusorText());
+     //   }
     }
 
     public void process() throws IOException
